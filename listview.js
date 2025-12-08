@@ -215,207 +215,169 @@ document.addEventListener("DOMContentLoaded", function () {
   let nextGalleryData = null; // Lưu data của gallery tiếp theo
 
   async function transitionToNextPost(nextArticle) {
-    if (swipeState.isTransitioning || !nextArticle) return;
-    swipeState.isTransitioning = true;
+  if (swipeState.isTransitioning || !nextArticle) return;
+  swipeState.isTransitioning = true;
 
-    const currentGallery = document.getElementById('lightgallery');
-    const currentUI = document.querySelector('.gallery-custom-ui');
-    
-    // Lấy data của bài viết tiếp theo (đã được preload)
-    const nextUrl = nextArticle.querySelector('a[data-post-url]')?.dataset.postUrl;
-    if (!nextUrl) {
-      swipeState.isTransitioning = false;
-      return;
-    }
+  const nextUrl = nextArticle.querySelector('a[data-post-url]')?.dataset.postUrl;
+  if (!nextUrl) return swipeState.isTransitioning = false;
 
-    const nextData = await fetchPostData(nextUrl);
-    if (!nextData.images.length) {
-      swipeState.isTransitioning = false;
-      return;
-    }
+  const nextData = await fetchPostData(nextUrl);
+  if (!nextData.images.length) return swipeState.isTransitioning = false;
 
-    // Tạo gallery mới TRƯỚC KHI xóa gallery cũ
-    const newGalleryEl = document.createElement('div');
-    newGalleryEl.id = 'lightgallery-next';
-    newGalleryEl.style.cssText = 'display:none; position:fixed; top:100%; left:0; width:100%; height:100%; z-index:99998;';
-    document.body.appendChild(newGalleryEl);
+  // Tạo gallery mới nhưng hoàn toàn INVISIBLE, không display:none
+  const newGalleryEl = document.createElement('div');
+  newGalleryEl.id = 'lightgallery-next';
+  newGalleryEl.style.cssText = `
+    position:fixed; top:100%; left:0; width:100%; height:100%;
+    z-index:99999; opacity:0; pointer-events:none;
+  `;
+  document.body.appendChild(newGalleryEl);
 
-    const items = nextData.images.map(src => ({ src, thumb: src }));
-    const newLgInstance = lightGallery(newGalleryEl, {
-      dynamic: true,
-      dynamicEl: items,
-      thumbnail: false,
-      download: false,
-      counter: false,
-      loop: true,
-      swipeToClose: false,
-      escKey: false
-    });
+  // Khởi tạo lightGallery nhưng ép opacity=0 → không bị flash ảnh bé
+  const items = nextData.images.map(src => ({ src, thumb: src }));
+  const newLg = lightGallery(newGalleryEl, {
+    dynamic: true,
+    dynamicEl: items,
+    showBeforeLoad: false,
+    counter: false,
+    download: false,
+    thumbnail: false
+  });
 
-    // Mở gallery mới (vẫn ở dưới)
-    newLgInstance.openGallery(0);
+  newLg.openGallery(0);
 
-    // Chờ gallery mới render xong
-    await new Promise(resolve => setTimeout(resolve, 100));
+  // Chờ LightGallery render nội dung xong
+  await new Promise(r => setTimeout(r, 150));
 
-    const newOuter = document.querySelector('#lightgallery-next .lg-outer');
-    if (newOuter) {
-      newOuter.style.cssText = 'opacity: 1; transition: none;';
-    }
+  const newOuter = newGalleryEl.querySelector('.lg-outer');
+  newOuter.style.opacity = "1";
 
-    // Animation đồng bộ: cũ đi lên, mới theo sau
-    if (currentGallery) {
-      const currentOuter = currentGallery.querySelector('.lg-outer');
-      if (currentOuter) {
-        currentOuter.style.transition = 'transform 0.4s cubic-bezier(0.4, 0, 0.2, 1)';
-        currentOuter.style.transform = 'translateY(-100%)';
-      }
-    }
+  // Animate chuyển gallery
+  const currentOuter = document.querySelector('#lightgallery .lg-outer');
+  currentOuter.style.transition = "transform .35s ease";
+  newGalleryEl.style.transition = "top .35s ease";
 
-    if (newOuter) {
-      newGalleryEl.style.display = 'block';
-      newGalleryEl.style.transition = 'top 0.4s cubic-bezier(0.4, 0, 0.2, 1)';
-      await new Promise(resolve => setTimeout(resolve, 50));
-      newGalleryEl.style.top = '0';
-    }
+  // Bắt đầu chuyển
+  currentOuter.style.transform = "translateY(-100%)";
+  newGalleryEl.style.top = "0";
 
-    // Đợi animation hoàn tất
-    await new Promise(resolve => setTimeout(resolve, 400));
+  await new Promise(r => setTimeout(r, 350));
 
-    // Xóa gallery cũ
-    removeSwipeToClose();
-    if (lgInstance) {
-      lgInstance.destroy();
-      lgInstance = null;
-    }
-    currentGallery?.remove();
-    currentUI?.remove();
+  // Xoá gallery cũ hoàn toàn
+  removeSwipeToClose();
+  if (lgInstance) lgInstance.destroy();
+  document.querySelectorAll('#lightgallery, .lg-backdrop').forEach(el => el.remove());
 
-    // Chuyển gallery mới thành gallery chính
-    newGalleryEl.id = 'lightgallery';
-    newGalleryEl.style.cssText = '';
-    lgInstance = newLgInstance;
+  // Đặt gallery mới thành chính
+  newGalleryEl.id = "lightgallery";
+  newGalleryEl.style.cssText = "";
+  lgInstance = newLg;
 
-    // Update state
-    currentPostData = { ...nextData, url: nextUrl, article: nextArticle };
-    preloadImages(nextData.images);
-    preloadAdjacentPosts(nextArticle);
+  currentPostData = { ...nextData, url: nextUrl, article: nextArticle };
+  preloadImages(nextData.images);
+  preloadAdjacentPosts(nextArticle);
+  addCustomUI(nextUrl, nextArticle);
+  initSwipeToClose();
 
-    // Thêm UI và swipe handlers
-    addCustomUI(nextUrl, nextArticle);
-    initSwipeToClose();
-
-    swipeState.isTransitioning = false;
+  swipeState = { startY:0, currentY:0, isDragging:false, isTransitioning:false };
   }
 
+
   function initSwipeToClose() {
-    const lgOuter = document.querySelector('.lg-outer');
-    if (!lgOuter) return;
+  const lgOuter = document.querySelector('.lg-outer');
+  if (!lgOuter) return;
 
-    const swipeOverlay = document.createElement('div');
-    swipeOverlay.className = 'lg-swipe-overlay';
-    swipeOverlay.style.cssText = `
-      position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-      background: #000; opacity: 1; pointer-events: none; z-index: 1;
-    `;
-    lgOuter.insertBefore(swipeOverlay, lgOuter.firstChild);
+  swipeState = { startY: 0, currentY: 0, isDragging: false, isTransitioning: false };
 
-    const handleTouchStart = (e) => {
-      if (swipeState.isTransitioning) return;
-      const target = e.target;
-      if (target.closest('.gallery-custom-ui') || target.closest('.lg-toolbar')) return;
+  const overlay = document.createElement('div');
+  overlay.className = 'lg-swipe-overlay';
+  overlay.style.cssText = `
+    position:fixed; width:100%; height:100%; top:0; left:0;
+    background:#000; opacity:1; z-index:1; pointer-events:none;
+  `;
+  lgOuter.prepend(overlay);
 
-      swipeState.startY = e.touches[0].clientY;
-      swipeState.isDragging = false;
-      lgOuter.style.transition = 'none';
-      swipeOverlay.style.transition = 'none';
-    };
+  function onStart(e) {
+    if (swipeState.isTransitioning) return;
+    swipeState.startY = e.touches[0].clientY;
+    swipeState.isDragging = false;
+    lgOuter.style.transition = "";
+  }
 
-    const handleTouchMove = (e) => {
-      if (swipeState.startY === 0 || swipeState.isTransitioning) return;
+  function onMove(e) {
+    const y = e.touches[0].clientY;
+    swipeState.currentY = y;
 
-      swipeState.currentY = e.touches[0].clientY;
-      const diffY = swipeState.currentY - swipeState.startY;
+    const diff = y - swipeState.startY;
+    if (Math.abs(diff) < 10) return;
 
-      if (Math.abs(diffY) > 10) {
-        swipeState.isDragging = true;
-        e.preventDefault();
+    swipeState.isDragging = true;
+    e.preventDefault();
 
-        if (diffY > 0) {
-          // Vuốt xuống - đóng
-          const scale = Math.max(0.85, 1 - (diffY / 1000));
-          const opacity = Math.max(0, 1 - (diffY / 400));
-          lgOuter.style.transform = `translateY(${diffY}px) scale(${scale})`;
-          swipeOverlay.style.opacity = opacity;
-        } else {
-          // Vuốt lên - chuyển bài
-          const nextArticle = getNextArticle(currentPostData.article);
-          if (nextArticle) {
-            lgOuter.style.transform = `translateY(${diffY}px)`;
-          } else {
-            lgOuter.style.transform = `translateY(${diffY * 0.3}px)`;
-          }
-        }
-      }
-    };
+    if (diff > 0) {
+      // Vuốt xuống
+      lgOuter.style.transform = `translateY(${diff}px) scale(${1 - diff/1200})`;
+      overlay.style.opacity = 1 - diff / 300;
+    } else {
+      // Vuốt lên
+      lgOuter.style.transform = `translateY(${diff}px)`;
+    }
+  }
 
-    const handleTouchEnd = async () => {
-      if (!swipeState.isDragging || swipeState.isTransitioning) {
-        swipeState.startY = 0;
-        swipeState.currentY = 0;
-        return;
-      }
+  async function onEnd() {
+    const diff = swipeState.currentY - swipeState.startY;
 
-      const diffY = swipeState.currentY - swipeState.startY;
-      const threshold = 100;
+    if (!swipeState.isDragging) return;
 
-      lgOuter.style.transition = 'transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.3s ease';
-      swipeOverlay.style.transition = 'opacity 0.3s ease';
+    const threshold = 100;
 
-      if (diffY > threshold) {
-        // Đóng gallery
-        lgOuter.style.transform = 'translateY(100vh) scale(0.8)';
-        lgOuter.style.opacity = '0';
-        swipeOverlay.style.opacity = '0';
-        setTimeout(() => closeGallery(), 300);
-      } else if (diffY < -threshold) {
-        // Chuyển bài tiếp theo
-        const nextArticle = getNextArticle(currentPostData.article);
-        if (nextArticle) {
-          await transitionToNextPost(nextArticle);
-        } else {
-          lgOuter.style.transform = '';
-        }
+    lgOuter.style.transition = "transform .3s ease";
+
+    if (diff > threshold) {
+      // Đóng
+      lgOuter.style.transform = "translateY(100vh) scale(0.8)";
+      setTimeout(closeGallery, 280);
+    }
+
+    else if (diff < -threshold) {
+      // Next gallery
+      const next = getNextArticle(currentPostData.article);
+      if (next) {
+        swipeState.isTransitioning = true;
+        await transitionToNextPost(next);
       } else {
-        // Reset
-        lgOuter.style.transform = '';
-        swipeOverlay.style.opacity = '1';
+        lgOuter.style.transform = "";
       }
+    }
 
-      swipeState.startY = 0;
-      swipeState.currentY = 0;
-      swipeState.isDragging = false;
-    };
+    else {
+      lgOuter.style.transform = "";
+      overlay.style.opacity = 1;
+    }
+  }
 
-    lgOuter.addEventListener('touchstart', handleTouchStart, { passive: true });
-    lgOuter.addEventListener('touchmove', handleTouchMove, { passive: false });
-    lgOuter.addEventListener('touchend', handleTouchEnd);
+  lgOuter.addEventListener("touchstart", onStart, { passive: true });
+  lgOuter.addEventListener("touchmove", onMove, { passive: false });
+  lgOuter.addEventListener("touchend", onEnd);
 
-    lgOuter._swipeHandlers = { touchstart: handleTouchStart, touchmove: handleTouchMove, touchend: handleTouchEnd };
+  lgOuter._swipeHandlers = { onStart, onMove, onEnd };
   }
 
   function removeSwipeToClose() {
-    const lgOuter = document.querySelector('.lg-outer');
-    if (!lgOuter?._swipeHandlers) return;
+  const lgOuter = document.querySelector('.lg-outer');
+  if (!lgOuter || !lgOuter._swipeHandlers) return;
 
-    const h = lgOuter._swipeHandlers;
-    lgOuter.removeEventListener('touchstart', h.touchstart);
-    lgOuter.removeEventListener('touchmove', h.touchmove);
-    lgOuter.removeEventListener('touchend', h.touchend);
-    delete lgOuter._swipeHandlers;
+  const { onStart, onMove, onEnd } = lgOuter._swipeHandlers;
+  lgOuter.removeEventListener("touchstart", onStart);
+  lgOuter.removeEventListener("touchmove", onMove);
+  lgOuter.removeEventListener("touchend", onEnd);
 
-    lgOuter.querySelector('.lg-swipe-overlay')?.remove();
+  delete lgOuter._swipeHandlers;
+
+  lgOuter.querySelector('.lg-swipe-overlay')?.remove();
   }
+
+  
 
   async function openGallery(article, skipLoading = false) {
     const postUrl = article.querySelector('a[data-post-url]')?.dataset.postUrl;
