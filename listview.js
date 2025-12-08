@@ -1,18 +1,29 @@
 document.addEventListener("DOMContentLoaded", function () {
   if (!document.body.classList.contains("list-view")) return;
 
-  // ========== CACHE MANAGER ==========
+  // ========== CACHE MANAGER (IN-MEMORY ONLY) ==========
+  const CACHE_VERSION = 'v3';
   const imageCache = new Map();
+
   const postCache = {
     maxSize: 15,
     cache: new Map(),
-    get(url) { return this.cache.get(url) || null; },
+    
+    get(url) {
+      return this.cache.get(url) || null;
+    },
+    
     set(url, data) {
       const keys = Array.from(this.cache.keys());
       if (keys.length >= this.maxSize) {
-        this.cache.delete(keys[0]);
+        const oldest = keys[0];
+        this.cache.delete(oldest);
       }
       this.cache.set(url, data);
+    },
+    
+    clear() {
+      this.cache.clear();
     }
   };
 
@@ -28,9 +39,11 @@ document.addEventListener("DOMContentLoaded", function () {
       const doc = parser.parseFromString(html, 'text/html');
       
       const images = [];
-      doc.querySelectorAll('.separator a[href]').forEach(link => {
-        if (link.href && !link.href.includes('blogger.googleusercontent.com/tracker')) {
-          images.push(link.href);
+      const separators = doc.querySelectorAll('.separator a[href]');
+      separators.forEach(link => {
+        let imgUrl = link.href;
+        if (imgUrl && !imgUrl.includes('blogger.googleusercontent.com/tracker')) {
+          images.push(imgUrl);
         }
       });
       
@@ -42,16 +55,47 @@ document.addEventListener("DOMContentLoaded", function () {
         textContent = clone.innerHTML;
       }
       
-      const data = { images, textContent };
+      let commentsUrl = null;
+      
+      const commentsFrame = doc.querySelector('iframe[src*="blogger.com/comment"]');
+      if (commentsFrame) {
+        commentsUrl = commentsFrame.src;
+      }
+      
+      if (!commentsUrl) {
+        const scripts = doc.querySelectorAll('script');
+        scripts.forEach(script => {
+          const content = script.textContent;
+          if (content.includes('commentIframeUrl')) {
+            const match = content.match(/commentIframeUrl["'\s:]+([^"']+)/);
+            if (match) commentsUrl = match[1];
+          }
+        });
+      }
+      
+      if (!commentsUrl) {
+        const blogIdMatch = html.match(/blogId[=:"'\s]+(\d+)/);
+        const postIdMatch = html.match(/postId[=:"'\s]+(\d+)/);
+        if (blogIdMatch && postIdMatch) {
+          commentsUrl = `https://www.blogger.com/comment-iframe.g?blogID=${blogIdMatch[1]}&postID=${postIdMatch[1]}`;
+        }
+      }
+      
+      const data = {
+        images,
+        textContent,
+        commentsUrl
+      };
+      
       postCache.set(url, data);
       return data;
     } catch (e) {
       console.error('Fetch error:', e);
-      return { images: [], textContent: '' };
+      return { images: [], textContent: '', commentsUrl: null };
     }
   }
 
-  // ========== PRELOAD ==========
+  // ========== PRELOAD IMAGES ==========
   function preloadImages(urls) {
     urls.forEach(url => {
       if (!imageCache.has(url)) {
@@ -62,34 +106,10 @@ document.addEventListener("DOMContentLoaded", function () {
     });
   }
 
-  async function preloadAdjacentPosts(currentArticle) {
-    const nextArticle = getNextArticle(currentArticle);
-    const prevArticle = getPrevArticle(currentArticle);
-    
-    const tasks = [];
-    
-    if (nextArticle) {
-      const url = nextArticle.querySelector('a[data-post-url]')?.dataset.postUrl;
-      if (url && !postCache.get(url)) {
-        tasks.push(fetchPostData(url).then(data => {
-          if (data.images[0]) preloadImages([data.images[0]]);
-        }));
-      }
-    }
-    
-    if (prevArticle) {
-      const url = prevArticle.querySelector('a[data-post-url]')?.dataset.postUrl;
-      if (url && !postCache.get(url)) {
-        tasks.push(fetchPostData(url));
-      }
-    }
-    
-    Promise.all(tasks).catch(() => {});
-  }
-
-  // ========== HISTORY ==========
+  // ========== HISTORY MANAGER ==========
   const historyManager = {
     state: { drawer: null, gallery: false },
+    
     push(type) {
       if (type === 'gallery') {
         this.state.gallery = true;
@@ -99,6 +119,7 @@ document.addEventListener("DOMContentLoaded", function () {
         history.pushState({ drawerOpen: type }, '');
       }
     },
+    
     pop() {
       if (this.state.drawer) {
         closeDrawer();
@@ -114,31 +135,44 @@ document.addEventListener("DOMContentLoaded", function () {
     }
   };
 
-  window.addEventListener('popstate', () => historyManager.pop());
+  window.addEventListener('popstate', (e) => {
+    historyManager.pop();
+  });
 
-  // ========== DRAWER ==========
+  
+  // ========== DRAWER MANAGER ==========
   let currentDrawer = null;
 
-  function createDrawer(type, content) {
+  function createDrawer(type, content, postUrl) {
     closeDrawer();
+    
     const drawer = document.createElement('div');
     drawer.className = 'custom-drawer';
+    const heightClass = type === 'content' ? 'drawer-90' : '';
     drawer.innerHTML = `
       <div class="drawer-overlay"></div>
-      <div class="drawer-content ${type === 'content' ? 'drawer-90' : ''}">
-        <div class="drawer-header"><button class="drawer-close">✕</button></div>
+      <div class="drawer-content ${heightClass}">
+        <div class="drawer-header">
+          <button class="drawer-close">✕</button>
+        </div>
         <div class="drawer-body">${content}</div>
       </div>
     `;
+    
     document.body.appendChild(drawer);
     currentDrawer = drawer;
-    requestAnimationFrame(() => drawer.classList.add('active'));
+    
+    requestAnimationFrame(() => {
+      drawer.classList.add('active');
+    });
     
     const overlay = drawer.querySelector('.drawer-overlay');
     const drawerContent = drawer.querySelector('.drawer-content');
     const closeBtn = drawer.querySelector('.drawer-close');
     
-    let startY = 0, currentY = 0;
+    let startY = 0;
+    let currentY = 0;
+    
     drawerContent.addEventListener('touchstart', (e) => {
       startY = e.touches[0].clientY;
     }, { passive: true });
@@ -146,31 +180,38 @@ document.addEventListener("DOMContentLoaded", function () {
     drawerContent.addEventListener('touchmove', (e) => {
       currentY = e.touches[0].clientY;
       const diff = currentY - startY;
-      if (diff > 0) drawerContent.style.transform = `translateY(${diff}px)`;
+      if (diff > 0) {
+        drawerContent.style.transform = `translateY(${diff}px)`;
+      }
     }, { passive: true });
     
     drawerContent.addEventListener('touchend', () => {
-      if (currentY - startY > 100) closeDrawer();
-      else drawerContent.style.transform = '';
+      const diff = currentY - startY;
+      if (diff > 100) {
+        closeDrawer();
+      } else {
+        drawerContent.style.transform = '';
+      }
     });
     
     overlay.addEventListener('click', closeDrawer);
     closeBtn.addEventListener('click', closeDrawer);
+    
     historyManager.push('drawer');
   }
 
   function closeDrawer() {
     if (!currentDrawer) return;
+    
     currentDrawer.classList.remove('active');
     setTimeout(() => {
       currentDrawer?.remove();
       currentDrawer = null;
     }, 300);
   }
-
-  // ========== LOADING ==========
+  
+  // ========== LOADING INDICATOR ==========
   function showLoading() {
-    if (document.getElementById('gallery-loading')) return;
     const loading = document.createElement('div');
     loading.id = 'gallery-loading';
     loading.innerHTML = `
@@ -181,231 +222,246 @@ document.addEventListener("DOMContentLoaded", function () {
       </div>
     `;
     document.body.appendChild(loading);
+    
+    const style = document.createElement('style');
+    style.textContent = `
+      #gallery-loading {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        z-index: 99999;
+      }
+      
+      #gallery-loading .loading-overlay {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0, 0, 0, 0.8);
+      }
+      
+      #gallery-loading .loading-spinner {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        text-align: center;
+      }
+      
+      #gallery-loading .spinner {
+        width: 24px;
+        height: 24px;
+        margin: 0 auto 10px;
+        border: 3px solid rgba(255, 255, 255, 0.3);
+        border-top-color: #fff;
+        border-radius: 50%;
+        animation: spin 0.8s linear infinite;
+      }
+      
+      #gallery-loading p {
+        color: #fff;
+        font-size: 14px;
+        margin: 0;
+      }
+      
+      @keyframes spin {
+        to { transform: rotate(360deg); }
+      }
+      
+      .gallery-custom-ui {
+        pointer-events: auto !important;
+        z-index: 99999 !important;
+      }
+      
+      .gallery-custom-ui .ui-btn {
+        pointer-events: auto !important;
+      }
+    `;
+    document.head.appendChild(style);
   }
-
+  
   function hideLoading() {
-    document.getElementById('gallery-loading')?.remove();
+    const loading = document.getElementById('gallery-loading');
+    if (loading) {
+      loading.remove();
+    }
   }
 
-  // ========== NAVIGATION ==========
-  function getNextArticle(current) {
-    const articles = Array.from(document.querySelectorAll('article'));
-    const idx = articles.indexOf(current);
-    return (idx === -1 || idx === articles.length - 1) ? null : articles[idx + 1];
-  }
-
-  function getPrevArticle(current) {
-    const articles = Array.from(document.querySelectorAll('article'));
-    const idx = articles.indexOf(current);
-    return (idx === -1 || idx === 0) ? null : articles[idx - 1];
-  }
-
-  // ========== SWIPE STATE ==========
+  // ========== SWIPE TO CLOSE MANAGER ==========
   let swipeState = {
     startY: 0,
     currentY: 0,
     isDragging: false,
-    isTransitioning: false
+    startX: 0,
+    currentX: 0
   };
+
+  function initSwipeToClose() {
+    const lgOuter = document.querySelector('.lg-outer');
+    if (!lgOuter) return;
+
+    // Tạo overlay để hiển thị hiệu ứng fade
+    const swipeOverlay = document.createElement('div');
+    swipeOverlay.className = 'lg-swipe-overlay';
+    swipeOverlay.style.cssText = `
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: #000;
+      opacity: 1;
+      pointer-events: none;
+      z-index: 1;
+      transition: none;
+    `;
+    lgOuter.insertBefore(swipeOverlay, lgOuter.firstChild);
+
+    const handleTouchStart = (e) => {
+      // Chỉ xử lý nếu chạm vào ảnh, không phải UI buttons
+      const target = e.target;
+      if (target.closest('.gallery-custom-ui') || target.closest('.lg-toolbar')) {
+        return;
+      }
+
+      swipeState.startY = e.touches[0].clientY;
+      swipeState.startX = e.touches[0].clientX;
+      swipeState.isDragging = false;
+
+      // Disable transition khi bắt đầu kéo
+      lgOuter.style.transition = 'none';
+      swipeOverlay.style.transition = 'none';
+    };
+
+    const handleTouchMove = (e) => {
+      if (swipeState.startY === 0) return;
+
+      swipeState.currentY = e.touches[0].clientY;
+      swipeState.currentX = e.touches[0].clientX;
+      
+      const diffY = swipeState.currentY - swipeState.startY;
+      const diffX = Math.abs(swipeState.currentX - swipeState.startX);
+
+      // Chỉ kích hoạt swipe down nếu vuốt dọc nhiều hơn vuốt ngang
+      if (Math.abs(diffY) > diffX && Math.abs(diffY) > 10) {
+        swipeState.isDragging = true;
+        e.preventDefault();
+
+        // Chỉ cho phép kéo xuống
+        if (diffY > 0) {
+          const scale = Math.max(0.85, 1 - (diffY / 1000));
+          const opacity = Math.max(0, 1 - (diffY / 400));
+          
+          lgOuter.style.transform = `translateY(${diffY}px) scale(${scale})`;
+          swipeOverlay.style.opacity = opacity;
+        }
+      }
+    };
+
+    const handleTouchEnd = () => {
+      if (!swipeState.isDragging) {
+        swipeState.startY = 0;
+        swipeState.currentY = 0;
+        return;
+      }
+
+      const diffY = swipeState.currentY - swipeState.startY;
+
+      // Enable transition để animation mượt
+      lgOuter.style.transition = 'transform 0.3s ease, opacity 0.3s ease';
+      swipeOverlay.style.transition = 'opacity 0.3s ease';
+
+      // Nếu kéo xuống > 150px thì đóng gallery
+      if (diffY > 150) {
+        lgOuter.style.transform = `translateY(100vh) scale(0.8)`;
+        lgOuter.style.opacity = '0';
+        swipeOverlay.style.opacity = '0';
+        
+        setTimeout(() => {
+          closeGallery();
+        }, 300);
+      } else {
+        // Reset về vị trí ban đầu
+        lgOuter.style.transform = '';
+        swipeOverlay.style.opacity = '1';
+      }
+
+      swipeState.startY = 0;
+      swipeState.currentY = 0;
+      swipeState.isDragging = false;
+    };
+
+    // Thêm event listeners
+    lgOuter.addEventListener('touchstart', handleTouchStart, { passive: true });
+    lgOuter.addEventListener('touchmove', handleTouchMove, { passive: false });
+    lgOuter.addEventListener('touchend', handleTouchEnd);
+
+    // Lưu lại để có thể remove sau này
+    lgOuter._swipeHandlers = {
+      touchstart: handleTouchStart,
+      touchmove: handleTouchMove,
+      touchend: handleTouchEnd
+    };
+  }
+
+  function removeSwipeToClose() {
+    const lgOuter = document.querySelector('.lg-outer');
+    if (!lgOuter || !lgOuter._swipeHandlers) return;
+
+    const handlers = lgOuter._swipeHandlers;
+    lgOuter.removeEventListener('touchstart', handlers.touchstart);
+    lgOuter.removeEventListener('touchmove', handlers.touchmove);
+    lgOuter.removeEventListener('touchend', handlers.touchend);
+    
+    delete lgOuter._swipeHandlers;
+
+    const swipeOverlay = lgOuter.querySelector('.lg-swipe-overlay');
+    if (swipeOverlay) swipeOverlay.remove();
+  }
 
   // ========== GALLERY MANAGER ==========
   let lgInstance = null;
   let currentPostData = null;
   let uiVisible = false;
-  let nextGalleryData = null; // Lưu data của gallery tiếp theo
 
-  async function transitionToNextPost(nextArticle) {
-  if (swipeState.isTransitioning || !nextArticle) return;
-  swipeState.isTransitioning = true;
-
-  const nextUrl = nextArticle.querySelector('a[data-post-url]')?.dataset.postUrl;
-  if (!nextUrl) return swipeState.isTransitioning = false;
-
-  const nextData = await fetchPostData(nextUrl);
-  if (!nextData.images.length) return swipeState.isTransitioning = false;
-
-  // Tạo gallery mới nhưng hoàn toàn INVISIBLE, không display:none
-  const newGalleryEl = document.createElement('div');
-  newGalleryEl.id = 'lightgallery-next';
-  newGalleryEl.style.cssText = `
-    position:fixed; top:100%; left:0; width:100%; height:100%;
-    z-index:99999; opacity:0; pointer-events:none;
-  `;
-  document.body.appendChild(newGalleryEl);
-
-  // Khởi tạo lightGallery nhưng ép opacity=0 → không bị flash ảnh bé
-  const items = nextData.images.map(src => ({ src, thumb: src }));
-  const newLg = lightGallery(newGalleryEl, {
-    dynamic: true,
-    dynamicEl: items,
-    showBeforeLoad: false,
-    counter: false,
-    download: false,
-    thumbnail: false
-  });
-
-  newLg.openGallery(0);
-
-  // Chờ LightGallery render nội dung xong
-  await new Promise(r => setTimeout(r, 150));
-
-  const newOuter = newGalleryEl.querySelector('.lg-outer');
-  newOuter.style.opacity = "1";
-
-  // Animate chuyển gallery
-  const currentOuter = document.querySelector('#lightgallery .lg-outer');
-  currentOuter.style.transition = "transform .35s ease";
-  newGalleryEl.style.transition = "top .35s ease";
-
-  // Bắt đầu chuyển
-  currentOuter.style.transform = "translateY(-100%)";
-  newGalleryEl.style.top = "0";
-
-  await new Promise(r => setTimeout(r, 350));
-
-  // Xoá gallery cũ hoàn toàn
-  removeSwipeToClose();
-  if (lgInstance) lgInstance.destroy();
-  document.querySelectorAll('#lightgallery, .lg-backdrop').forEach(el => el.remove());
-
-  // Đặt gallery mới thành chính
-  newGalleryEl.id = "lightgallery";
-  newGalleryEl.style.cssText = "";
-  lgInstance = newLg;
-
-  currentPostData = { ...nextData, url: nextUrl, article: nextArticle };
-  preloadImages(nextData.images);
-  preloadAdjacentPosts(nextArticle);
-  addCustomUI(nextUrl, nextArticle);
-  initSwipeToClose();
-
-  swipeState = { startY:0, currentY:0, isDragging:false, isTransitioning:false };
-  }
-
-
-  function initSwipeToClose() {
-  const lgOuter = document.querySelector('.lg-outer');
-  if (!lgOuter) return;
-
-  swipeState = { startY: 0, currentY: 0, isDragging: false, isTransitioning: false };
-
-  const overlay = document.createElement('div');
-  overlay.className = 'lg-swipe-overlay';
-  overlay.style.cssText = `
-    position:fixed; width:100%; height:100%; top:0; left:0;
-    background:#000; opacity:1; z-index:1; pointer-events:none;
-  `;
-  lgOuter.prepend(overlay);
-
-  function onStart(e) {
-    if (swipeState.isTransitioning) return;
-    swipeState.startY = e.touches[0].clientY;
-    swipeState.isDragging = false;
-    lgOuter.style.transition = "";
-  }
-
-  function onMove(e) {
-    const y = e.touches[0].clientY;
-    swipeState.currentY = y;
-
-    const diff = y - swipeState.startY;
-    if (Math.abs(diff) < 10) return;
-
-    swipeState.isDragging = true;
-    e.preventDefault();
-
-    if (diff > 0) {
-      // Vuốt xuống
-      lgOuter.style.transform = `translateY(${diff}px) scale(${1 - diff/1200})`;
-      overlay.style.opacity = 1 - diff / 300;
-    } else {
-      // Vuốt lên
-      lgOuter.style.transform = `translateY(${diff}px)`;
-    }
-  }
-
-  async function onEnd() {
-    const diff = swipeState.currentY - swipeState.startY;
-
-    if (!swipeState.isDragging) return;
-
-    const threshold = 100;
-
-    lgOuter.style.transition = "transform .3s ease";
-
-    if (diff > threshold) {
-      // Đóng
-      lgOuter.style.transform = "translateY(100vh) scale(0.8)";
-      setTimeout(closeGallery, 280);
-    }
-
-    else if (diff < -threshold) {
-      // Next gallery
-      const next = getNextArticle(currentPostData.article);
-      if (next) {
-        swipeState.isTransitioning = true;
-        await transitionToNextPost(next);
-      } else {
-        lgOuter.style.transform = "";
-      }
-    }
-
-    else {
-      lgOuter.style.transform = "";
-      overlay.style.opacity = 1;
-    }
-  }
-
-  lgOuter.addEventListener("touchstart", onStart, { passive: true });
-  lgOuter.addEventListener("touchmove", onMove, { passive: false });
-  lgOuter.addEventListener("touchend", onEnd);
-
-  lgOuter._swipeHandlers = { onStart, onMove, onEnd };
-  }
-
-  function removeSwipeToClose() {
-  const lgOuter = document.querySelector('.lg-outer');
-  if (!lgOuter || !lgOuter._swipeHandlers) return;
-
-  const { onStart, onMove, onEnd } = lgOuter._swipeHandlers;
-  lgOuter.removeEventListener("touchstart", onStart);
-  lgOuter.removeEventListener("touchmove", onMove);
-  lgOuter.removeEventListener("touchend", onEnd);
-
-  delete lgOuter._swipeHandlers;
-
-  lgOuter.querySelector('.lg-swipe-overlay')?.remove();
-  }
-
-  
-
-  async function openGallery(article, skipLoading = false) {
+  async function openGallery(article) {
     const postUrl = article.querySelector('a[data-post-url]')?.dataset.postUrl;
-    if (!postUrl) return;
-
+    if (!postUrl) {
+      return;
+    }
+    
     uiVisible = false;
+    
     const cached = postCache.get(postUrl);
-
-    if (!cached && !skipLoading) showLoading();
-
+    
+    if (!cached) {
+      showLoading();
+    }
+    
     const postData = await fetchPostData(postUrl);
     if (!postData.images.length) {
       hideLoading();
-      if (!skipLoading) alert('Không tìm thấy ảnh trong bài viết');
+      alert('Không tìm thấy ảnh trong bài viết');
       return;
     }
-
+    
     currentPostData = { ...postData, url: postUrl, article };
+    
     preloadImages(postData.images);
-    preloadAdjacentPosts(article);
-
+    
     const galleryEl = document.createElement('div');
     galleryEl.id = 'lightgallery';
     galleryEl.style.display = 'none';
     document.body.appendChild(galleryEl);
-
-    const items = postData.images.map(src => ({ src, thumb: src }));
-
+    
+    const items = postData.images.map(src => ({
+      src,
+      thumb: src
+    }));
+    
     lgInstance = lightGallery(galleryEl, {
       dynamic: true,
       dynamicEl: items,
@@ -416,31 +472,39 @@ document.addEventListener("DOMContentLoaded", function () {
       swipeToClose: false,
       escKey: false
     });
-
+    
     addCustomUI(postUrl, article);
 
     requestAnimationFrame(() => {
       lgInstance.openGallery(0);
+      
       setTimeout(() => {
         hideLoading();
+        // Khởi tạo swipe to close sau khi gallery mở xong
         initSwipeToClose();
       }, 300);
     });
 
-    if (!skipLoading) historyManager.push('gallery');
+    historyManager.push('gallery');
   }
 
   function closeGallery() {
     hideLoading();
+    
+    // Remove swipe handlers trước khi đóng
     removeSwipeToClose();
-
+    
     if (lgInstance) {
       lgInstance.destroy();
       lgInstance = null;
     }
+    
+    const galleryEl = document.getElementById('lightgallery');
+    if (galleryEl) galleryEl.remove();
+    
+    const customUI = document.querySelector('.gallery-custom-ui');
+    if (customUI) customUI.remove();
 
-    document.getElementById('lightgallery')?.remove();
-    document.querySelector('.gallery-custom-ui')?.remove();
     closeDrawer();
     currentPostData = null;
     uiVisible = true;
@@ -453,35 +517,42 @@ document.addEventListener("DOMContentLoaded", function () {
     const reloadBtn = document.createElement('button');
     reloadBtn.className = 'ui-btn ui-reload';
     reloadBtn.title = 'Tải lại';
-    reloadBtn.innerHTML = '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"></polyline><polyline points="1 20 1 14 7 14"></polyline><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg>';
+    reloadBtn.innerHTML =
+        '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"></polyline><polyline points="1 20 1 14 7 14"></polyline><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg>';
 
     const commentBtn = document.createElement('button');
     commentBtn.className = 'ui-btn ui-comment';
     commentBtn.title = 'Bình luận';
-    commentBtn.innerHTML = '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>';
+    commentBtn.innerHTML =
+        '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>';
 
     const linkBtn = document.createElement('a');
     linkBtn.className = 'ui-btn ui-link';
     linkBtn.href = postUrl;
     linkBtn.title = 'Mở bài viết';
     linkBtn.target = "_blank";
-    linkBtn.innerHTML = '<svg width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 1 0-7l2-2a5 5 0 1 1 7 7l-1.5 1.5"/><path d="M14 11a5 5 0 0 1 0 7l-2 2a5 5 0 1 1-7-7l1.5-1.5"/></svg>';
+    linkBtn.innerHTML =
+        '<svg width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 1 0-7l2-2a5 5 0 1 1 7 7l-1.5 1.5"/><path d="M14 11a5 5 0 0 1 0 7l-2 2a5 5 0 1 1-7-7l1.5-1.5"/></svg>';
 
     const contentBtn = document.createElement('button');
     contentBtn.className = 'ui-btn ui-post-content';
     contentBtn.title = 'Nội dung bài viết';
-    contentBtn.innerHTML = '<svg width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M4 4h16v16H4z"/><path d="M8 8h8M8 12h6M8 16h4"/></svg>';
+    contentBtn.innerHTML =
+        '<svg width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M4 4h16v16H4z"/><path d="M8 8h8M8 12h6M8 16h4"/></svg>';
 
     const toggleBtn = document.createElement('button');
     toggleBtn.className = 'ui-btn ui-toggle-visibility';
     toggleBtn.title = 'Ẩn/Hiện UI';
-    toggleBtn.innerHTML = '<svg class="icon-eye" width="24" style="display:none" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg><svg class="icon-eye-slash" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/><line x1="1" y1="1" x2="23" y2="23"></line></svg>';
+    toggleBtn.innerHTML =
+        '<svg class="icon-eye" width="24" style="display:none" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>' +
+        '<svg class="icon-eye-slash" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/><line x1="1" y1="1" x2="23" y2="23"></line></svg>';
 
     uiContainer.appendChild(reloadBtn);
     uiContainer.appendChild(commentBtn);
     uiContainer.appendChild(linkBtn);
     uiContainer.appendChild(contentBtn);
     uiContainer.appendChild(toggleBtn);
+
     document.body.appendChild(uiContainer);
 
     reloadBtn.style.display = 'none';
@@ -502,11 +573,14 @@ document.addEventListener("DOMContentLoaded", function () {
 
     contentBtn.addEventListener("click", () => {
       let html = currentPostData?.textContent?.trim() || "";
+
       const tmp = document.createElement("div");
       tmp.innerHTML = html;
+
       if (tmp.textContent.trim().length === 0) {
         html = `<p style="text-align:center;opacity:.6;padding:25px">Chưa có nội dung</p>`;
       }
+
       createDrawer("content", html);
     });
 
@@ -514,10 +588,37 @@ document.addEventListener("DOMContentLoaded", function () {
     const iconEyeSlash = toggleBtn.querySelector('.icon-eye-slash');
     const buttons = [reloadBtn, commentBtn, linkBtn, contentBtn];
 
-    const toggleUI = (e) => {
+    toggleBtn.addEventListener('mousedown', (e) => {
       e.preventDefault();
       e.stopPropagation();
+      e.stopImmediatePropagation();
+      
       uiVisible = !uiVisible;
+
+      if (uiVisible) {
+        iconEye.style.display = 'block';
+        iconEyeSlash.style.display = 'none';
+        buttons.forEach(b => {
+          b.style.display = 'flex';
+        });
+      } else {
+        iconEye.style.display = 'none';
+        iconEyeSlash.style.display = 'block';
+        buttons.forEach(b => {
+          b.style.display = 'none';
+        });
+      }
+      
+      return false;
+    }, true);
+    
+    toggleBtn.addEventListener('touchstart', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      e.stopImmediatePropagation();
+      
+      uiVisible = !uiVisible;
+
       if (uiVisible) {
         iconEye.style.display = 'block';
         iconEyeSlash.style.display = 'none';
@@ -527,74 +628,64 @@ document.addEventListener("DOMContentLoaded", function () {
         iconEyeSlash.style.display = 'block';
         buttons.forEach(b => b.style.display = 'none');
       }
+      
       return false;
-    };
-
-    toggleBtn.addEventListener('mousedown', toggleUI, true);
-    toggleBtn.addEventListener('touchstart', toggleUI, true);
+    }, true);
   }
 
-  // ========== EVENT LISTENERS ==========
+  // ========== EVENT LISTENER ==========
   function attachArticleEvents() {
     const articles = document.querySelectorAll('article');
+    console.log('Found articles:', articles.length);
+    
     articles.forEach(article => {
       if (article.dataset.galleryAttached) return;
       article.dataset.galleryAttached = 'true';
-
-      article.querySelectorAll('a').forEach(link => {
+      
+      const links = article.querySelectorAll('a');
+      
+      links.forEach(link => {
         if (link.href && !link.dataset.postUrl) {
           link.dataset.postUrl = link.href;
         }
+        
         link.addEventListener('click', function(e) {
           e.preventDefault();
           e.stopPropagation();
+          e.stopImmediatePropagation();
+          
+          console.log('Link clicked, opening gallery...');
           openGallery(article);
+          
           return false;
         }, true);
       });
     });
   }
-
+  
   setTimeout(attachArticleEvents, 500);
-
+  
   const observer = new MutationObserver((mutations) => {
-    let hasNew = false;
-    mutations.forEach(m => {
-      m.addedNodes.forEach(n => {
-        if (n.nodeType === 1 && (n.tagName === 'ARTICLE' || n.querySelector('article'))) {
-          hasNew = true;
+    let hasNewArticles = false;
+    mutations.forEach(mutation => {
+      mutation.addedNodes.forEach(node => {
+        if (node.nodeType === 1) {
+          if (node.tagName === 'ARTICLE' || node.querySelector('article')) {
+            hasNewArticles = true;
+          }
         }
       });
     });
-    if (hasNew) setTimeout(attachArticleEvents, 300);
+    
+    if (hasNewArticles) {
+      console.log('New articles detected, attaching events...');
+      setTimeout(attachArticleEvents, 300);
+    }
+  });
+  
+  observer.observe(document.body, {
+    childList: true,
+    subtree: true
   });
 
-  observer.observe(document.body, { childList: true, subtree: true });
-
-  // ========== INJECT STYLES ==========
-  const style = document.createElement('style');
-  style.textContent = `
-    #gallery-loading {
-      position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: 99999;
-    }
-    #gallery-loading .loading-overlay {
-      position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-      background: rgba(0, 0, 0, 0.8);
-    }
-    #gallery-loading .loading-spinner {
-      position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
-      text-align: center;
-    }
-    #gallery-loading .spinner {
-      width: 24px; height: 24px; margin: 0 auto 10px;
-      border: 3px solid rgba(255, 255, 255, 0.3);
-      border-top-color: #fff; border-radius: 50%;
-      animation: spin 0.8s linear infinite;
-    }
-    #gallery-loading p { color: #fff; font-size: 14px; margin: 0; }
-    @keyframes spin { to { transform: rotate(360deg); } }
-    .gallery-custom-ui { pointer-events: auto !important; z-index: 99999 !important; }
-    .gallery-custom-ui .ui-btn { pointer-events: auto !important; }
-  `;
-  document.head.appendChild(style);
 });
