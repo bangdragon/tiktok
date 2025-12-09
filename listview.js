@@ -234,14 +234,16 @@ document.addEventListener("DOMContentLoaded", function () {
 
     btnPrev.addEventListener('click', (e) => {
       e.stopPropagation();
-      currentImageIndex = Math.max(0, currentImageIndex - 1);
+      currentImageIndex = (currentImageIndex - 1 + postData.images.length) % postData.images.length;
+
       img.src = postData.images[currentImageIndex];
       preloadImages([postData.images[currentImageIndex - 1], postData.images[currentImageIndex + 1]]);
     });
 
     btnNext.addEventListener('click', (e) => {
       e.stopPropagation();
-      currentImageIndex = Math.min(postData.images.length - 1, currentImageIndex + 1);
+      currentImageIndex = (currentImageIndex + 1) % postData.images.length;
+
       img.src = postData.images[currentImageIndex];
       preloadImages([postData.images[currentImageIndex - 1], postData.images[currentImageIndex + 1]]);
     });
@@ -260,6 +262,42 @@ document.addEventListener("DOMContentLoaded", function () {
     layerEl.appendChild(img);
     layerEl.appendChild(nav);
     layerEl.appendChild(caption);
+    // === Swipe gesture (infinite left/right) ===
+let startX = 0;
+let currentX = 0;
+let dragging = false;
+
+img.addEventListener('touchstart', (e) => {
+  startX = e.touches[0].clientX;
+  dragging = true;
+});
+
+img.addEventListener('touchmove', (e) => {
+  if (!dragging) return;
+  currentX = e.touches[0].clientX;
+});
+
+img.addEventListener('touchend', () => {
+  if (!dragging) return;
+  dragging = false;
+
+  const diff = currentX - startX;
+  const threshold = 50;
+
+  if (Math.abs(diff) < threshold) return;
+
+  if (diff < 0) {
+    // swipe left → next
+    currentImageIndex = (currentImageIndex + 1) % postData.images.length;
+  } else {
+    // swipe right → prev
+    currentImageIndex = (currentImageIndex - 1 + postData.images.length) % postData.images.length;
+  }
+
+  img.src = postData.images[currentImageIndex];
+  caption.innerHTML = `<div>Ảnh ${currentImageIndex+1}/${postData.images.length}</div>`;
+});
+
   }
 
   // Preload adjacent posts
@@ -650,4 +688,3 @@ document.addEventListener("DOMContentLoaded", function () {
   // expose some functions
   window.__myGallery = { openGallery, closeGallery, preloadImages, fetchPostData, postCache };
 });
-                          
