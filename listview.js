@@ -17,7 +17,7 @@ document.addEventListener("DOMContentLoaded", function () {
     clear() { this.cache.clear(); }
   };
 
-  // ========== FETCH POST DATA (giữ nguyên logic) ==========
+  // ========== FETCH POST DATA (giữ nguyên logic của bạn) ==========
   async function fetchPostData(url) {
     const cached = postCache.get(url);
     if (cached) return cached;
@@ -103,7 +103,7 @@ document.addEventListener("DOMContentLoaded", function () {
   };
   window.addEventListener('popstate', () => historyManager.pop());
 
-  // ========== DRAWER MANAGER ==========
+  // ========== DRAWER MANAGER (giữ nguyên) ==========
   let currentDrawer = null;
   function createDrawer(type, content, postUrl) {
     closeDrawer();
@@ -147,7 +147,7 @@ document.addEventListener("DOMContentLoaded", function () {
     setTimeout(() => { currentDrawer?.remove(); currentDrawer = null; }, 300);
   }
 
-  // ========== LOADING INDICATOR ==========
+  // ========== LOADING INDICATOR (giữ nguyên) ==========
   function showLoading() {
     if (document.getElementById('gallery-loading')) return;
     const loading = document.createElement('div');
@@ -173,7 +173,7 @@ document.addEventListener("DOMContentLoaded", function () {
   }
   function hideLoading() { const loading = document.getElementById('gallery-loading'); if (loading) loading.remove(); }
 
-  // ========== UTIL: articles ==========
+  // ========== UTIL: get list of article elements, next/prev ==========
   function getArticles() { return Array.from(document.querySelectorAll('article')); }
   function getNextArticle(el) {
     const articles = getArticles();
@@ -188,10 +188,11 @@ document.addEventListener("DOMContentLoaded", function () {
 
   // ========== GALLERY 2-LAYER MANAGER ==========
   const galleryStack = document.getElementById('gallery-stack');
+  // use let so we can swap references
   let layerCurrent = document.getElementById('gallery-current');
   let layerNext = document.getElementById('gallery-next');
 
-  let currentPostData = null;
+  let currentPostData = null; // { images: [], textContent, commentsUrl, url, article }
   let nextPostData = null;
   let currentImageIndex = 0;
 
@@ -202,7 +203,7 @@ document.addEventListener("DOMContentLoaded", function () {
 
   // Set content of a layer from postData and image index
   function setLayerContent(layerEl, postData, imageIndex = 0) {
-    layerEl.innerHTML = '';
+    layerEl.innerHTML = ''; // clear
     if (!postData || !postData.images || postData.images.length === 0) {
       const ph = document.createElement('div');
       ph.className = 'placeholder';
@@ -210,142 +211,55 @@ document.addEventListener("DOMContentLoaded", function () {
       return;
     }
 
-    // create container to isolate transforms (safer)
-    const inner = document.createElement('div');
-    inner.className = 'gallery-inner';
-    inner.style.position = 'absolute';
-    inner.style.inset = 0;
-    inner.style.display = 'flex';
-    inner.style.alignItems = 'center';
-    inner.style.justifyContent = 'center';
-    inner.style.overflow = 'hidden';
-
     const img = document.createElement('img');
     img.className = 'gallery-img';
     img.draggable = false;
     img.alt = '';
     img.src = postData.images[Math.max(0, Math.min(imageIndex, postData.images.length - 1))];
 
-    // ensure best rendering and cover behavior; requires CSS in site:
-    // .gallery-img { width:100vw; height:100vh; object-fit:cover; object-position:center; }
-
     const caption = document.createElement('div');
     caption.className = 'gallery-caption';
     caption.innerHTML = `<div>${postData.images.length > 1 ? `Ảnh ${imageIndex+1}/${postData.images.length}` : ''}</div>`;
 
-    // append (no nav buttons — removed)
-    inner.appendChild(img);
-    layerEl.appendChild(inner);
-    layerEl.appendChild(caption);
+    const nav = document.createElement('div');
+    nav.className = 'gallery-nav';
+    const btnPrev = document.createElement('button');
+    btnPrev.innerText = '‹';
+    const btnNext = document.createElement('button');
+    btnNext.innerText = '›';
+    if (postData.images.length > 1) { btnPrev.style.display = 'block'; btnNext.style.display = 'block'; }
+    else { btnPrev.style.display = 'none'; btnNext.style.display = 'none'; }
+    nav.appendChild(btnPrev);
+    nav.appendChild(btnNext);
 
-    // === HORIZONTAL SWIPE: smooth animation (slide out + slide in) ===
-    // We'll animate the img element (inside inner). Use translateX.
-    let startX = 0, currentX = 0, dragging = false;
-    const SWIPE_THRESHOLD = 50;
-    // set initial transition for smooth snapping
-    img.style.transition = 'transform 0.25s ease';
-
-    function resetImgPosition() {
-      img.style.transition = 'transform 0.25s ease';
-      img.style.transform = 'translateX(0)';
-    }
-
-    img.addEventListener('touchstart', (e) => {
-      if (e.touches.length > 1) return;
-      startX = e.touches[0].clientX;
-      currentX = startX;
-      dragging = true;
-      // disable transition during drag for 1:1 feel
-      img.style.transition = 'none';
-    }, { passive: true });
-
-    img.addEventListener('touchmove', (e) => {
-      if (!dragging) return;
-      currentX = e.touches[0].clientX;
-      const deltaX = currentX - startX;
-      // move image along X with finger
-      img.style.transform = `translateX(${deltaX}px)`;
-    }, { passive: true });
-
-    img.addEventListener('touchend', (e) => {
-      if (!dragging) return;
-      dragging = false;
-      const diff = currentX - startX;
-      img.style.transition = 'transform 0.28s cubic-bezier(0.22, 0.8, 0.32, 1)';
-      // not enough displacement -> snap back
-      if (Math.abs(diff) < SWIPE_THRESHOLD) {
-        img.style.transform = 'translateX(0)';
-        return;
-      }
-
-      // prepare offscreen direction and perform animated swap
-      if (diff < 0) {
-        // swipe left -> next image
-        const oldSrc = img.src;
-        img.style.transform = `translateX(-100vw)`;
-
-        setTimeout(() => {
-          // change src to next (infinite loop)
-          currentImageIndex = (currentImageIndex + 1) % postData.images.length;
-          img.style.transition = 'none';
-          img.src = postData.images[currentImageIndex];
-          // place it offscreen right, then animate in
-          img.style.transform = 'translateX(100vw)';
-          // small delay to allow src to take effect
-          requestAnimationFrame(() => {
-            requestAnimationFrame(() => {
-              img.style.transition = 'transform 0.28s cubic-bezier(0.22,0.8,0.32,1)';
-              img.style.transform = 'translateX(0)';
-            });
-          });
-          caption.innerHTML = `<div>Ảnh ${currentImageIndex+1}/${postData.images.length}</div>`;
-          preloadImages([postData.images[currentImageIndex+1], postData.images[currentImageIndex-1]]);
-        }, 260);
-      } else {
-        // swipe right -> previous image
-        img.style.transform = `translateX(100vw)`;
-        setTimeout(() => {
-          currentImageIndex = (currentImageIndex - 1 + postData.images.length) % postData.images.length;
-          img.style.transition = 'none';
-          img.src = postData.images[currentImageIndex];
-          img.style.transform = 'translateX(-100vw)';
-          requestAnimationFrame(() => {
-            requestAnimationFrame(() => {
-              img.style.transition = 'transform 0.28s cubic-bezier(0.22,0.8,0.32,1)';
-              img.style.transform = 'translateX(0)';
-            });
-          });
-          caption.innerHTML = `<div>Ảnh ${currentImageIndex+1}/${postData.images.length}</div>`;
-          preloadImages([postData.images[currentImageIndex+1], postData.images[currentImageIndex-1]]);
-        }, 260);
-      }
+    btnPrev.addEventListener('click', (e) => {
+      e.stopPropagation();
+      currentImageIndex = Math.max(0, currentImageIndex - 1);
+      img.src = postData.images[currentImageIndex];
+      preloadImages([postData.images[currentImageIndex - 1], postData.images[currentImageIndex + 1]]);
     });
 
-    // Click to toggle UI (reuse existing toggle button if present)
+    btnNext.addEventListener('click', (e) => {
+      e.stopPropagation();
+      currentImageIndex = Math.min(postData.images.length - 1, currentImageIndex + 1);
+      img.src = postData.images[currentImageIndex];
+      preloadImages([postData.images[currentImageIndex - 1], postData.images[currentImageIndex + 1]]);
+    });
+
     img.addEventListener('click', (e) => {
       if (postData.images.length > 1) {
-        // if user taps (not swipes), advance one image (same animation as swipe left)
-        img.style.transition = 'transform 0.18s ease';
-        img.style.transform = 'translateX(-100vw)';
-        setTimeout(() => {
-          currentImageIndex = (currentImageIndex + 1) % postData.images.length;
-          img.style.transition = 'none';
-          img.src = postData.images[currentImageIndex];
-          img.style.transform = 'translateX(100vw)';
-          requestAnimationFrame(() => {
-            requestAnimationFrame(() => {
-              img.style.transition = 'transform 0.28s cubic-bezier(0.22,0.8,0.32,1)';
-              img.style.transform = 'translateX(0)';
-            });
-          });
-          caption.innerHTML = `<div>Ảnh ${currentImageIndex+1}/${postData.images.length}</div>`;
-          preloadImages([postData.images[currentImageIndex+1]]);
-        }, 180);
+        currentImageIndex = Math.min(postData.images.length - 1, currentImageIndex + 1);
+        img.src = postData.images[currentImageIndex];
+        preloadImages([postData.images[currentImageIndex + 1]]);
       } else {
         const toggleBtn = document.querySelector('.ui-toggle-visibility');
         if (toggleBtn) toggleBtn.dispatchEvent(new Event('touchstart'));
       }
     });
+
+    layerEl.appendChild(img);
+    layerEl.appendChild(nav);
+    layerEl.appendChild(caption);
   }
 
   // Preload adjacent posts
@@ -469,35 +383,41 @@ document.addEventListener("DOMContentLoaded", function () {
       return;
     }
 
-    // animate up
+    // animate
     layerCurrent.style.transition = 'transform .35s cubic-bezier(0.4,0,0.2,1)';
     layerNext.style.transition = 'transform .35s cubic-bezier(0.4,0,0.2,1)';
     layerCurrent.style.transform = 'translateY(-100%)';
     layerNext.style.transform = 'translateY(0)';
 
-    // wait
+    // wait for animation to complete
     await new Promise(res => setTimeout(res, 360));
 
-    // swap references
+    // At this point layerNext is visible and layerCurrent is offscreen (above).
+    // We'll *swap the JS references* so layerCurrent always points to the visible top layer.
+    // But to keep DOM elements (so any event listeners inside image remain intact), we just swap references.
     const oldLayerCurrent = layerCurrent;
     const oldLayerNext = layerNext;
+
+    // Swap references
     layerCurrent = oldLayerNext;
     layerNext = oldLayerCurrent;
 
+    // Ensure z-index: current (visible) above
     layerCurrent.style.zIndex = '2';
     layerNext.style.zIndex = '1';
 
-    // reset positions instantly
+    // Reset transforms *without transition* to instant positions so user doesn't see jump
     layerCurrent.style.transition = 'none';
     layerNext.style.transition = 'none';
     layerCurrent.style.transform = 'translateY(0)';
     layerNext.style.transform = 'translateY(100%)';
 
-    // update currentPostData
+    // update currentPostData to nextPostData; then load new nextPostData
+    const prevArticle = currentPostData?.article || null;
     currentPostData = nextPostData;
     currentImageIndex = 0;
 
-    // load new nextPostData (article after current)
+    // load the following article as nextPostData
     const newNextArticle = getNextArticle(currentPostData.article);
     if (newNextArticle) {
       const nextUrl = newNextArticle.querySelector('a[data-post-url]')?.dataset.postUrl;
@@ -506,151 +426,74 @@ document.addEventListener("DOMContentLoaded", function () {
       nextPostData = null;
     }
 
-    // ensure content matches
+    // fill content: layerCurrent already contains the DOM of previous layerNext (we swapped), but we want to ensure it reflects currentPostData:
+    // simplest: replace content of layerCurrent with canonical content for currentPostData (keeps predictable structure).
     setLayerContent(layerCurrent, currentPostData, currentImageIndex);
     setLayerContent(layerNext, nextPostData, 0);
 
+    // small timeout then re-enable transitions
     requestAnimationFrame(() => {
       layerCurrent.style.transition = '';
       layerNext.style.transition = '';
     });
 
+    // update UI for new current post
     addCustomUI(currentPostData.url, currentPostData.article);
+
+    // preload
     preloadImages(currentPostData.images || []);
     if (nextPostData && nextPostData.images) preloadImages([nextPostData.images[0]]);
     preloadAdjacentPosts(currentPostData.article);
 
-    // re-init gestures
+    // re-init gestures for the (new) layerCurrent
     removePointerHandlers();
     initLayerGestures();
   }
 
-  // Switch to previous post (animate current down, reveal prev)
-  async function switchToPrevPost() {
-    // find previous article (before currentPostData.article)
-    const prevArticle = getPrevArticle(currentPostData.article);
-    if (!prevArticle) {
-      // nothing prev - reset
-      layerCurrent.style.transition = 'transform .25s ease';
-      layerCurrent.style.transform = 'translateY(0)';
-      return;
-    }
-
-    // load prev post data (may be cached)
-    const prevUrl = prevArticle.querySelector('a[data-post-url]')?.dataset.postUrl;
-    const prevPost = prevUrl ? await fetchPostData(prevUrl) : null;
-    if (!prevPost) {
-      layerCurrent.style.transition = 'transform .25s ease';
-      layerCurrent.style.transform = 'translateY(0)';
-      return;
-    }
-
-    // We'll use layerNext as the 'prev' layer by placing it above (translateY(-100%))
-    // prepare layerNext content as prevPost
-    setLayerContent(layerNext, prevPost, 0);
-
-    // position layerNext above
-    layerNext.style.transition = 'none';
-    layerNext.style.transform = 'translateY(-100%)';
-    layerNext.style.zIndex = '1';
-
-    // allow paint
-    requestAnimationFrame(() => {
-      // animate: current moves down, prev moves to 0
-      layerCurrent.style.transition = 'transform .35s cubic-bezier(0.4,0,0.2,1)';
-      layerNext.style.transition = 'transform .35s cubic-bezier(0.4,0,0.2,1)';
-      layerCurrent.style.transform = 'translateY(100%)';
-      layerNext.style.transform = 'translateY(0)';
-    });
-
-    // wait
-    await new Promise(res => setTimeout(res, 360));
-
-    // swap references so layerCurrent points to visible one
-    const oldLayerCurrent = layerCurrent;
-    const oldLayerNext = layerNext;
-    layerCurrent = oldLayerNext;
-    layerNext = oldLayerCurrent;
-
-    layerCurrent.style.zIndex = '2';
-    layerNext.style.zIndex = '1';
-
-    // reset transforms instantly
-    layerCurrent.style.transition = 'none';
-    layerNext.style.transition = 'none';
-    layerCurrent.style.transform = 'translateY(0)';
-    layerNext.style.transform = 'translateY(100%)';
-
-    // update currentPostData to prevPost
-    currentPostData = prevPost;
-    currentImageIndex = 0;
-
-    // load new nextPostData (which is the article that comes after currentPostData.article)
-    const newNextArticle = getNextArticle(currentPostData.article);
-    if (newNextArticle) {
-      const nextUrl = newNextArticle.querySelector('a[data-post-url]')?.dataset.postUrl;
-      nextPostData = nextUrl ? await fetchPostData(nextUrl) : null;
-    } else {
-      nextPostData = null;
-    }
-
-    // ensure content correct
-    setLayerContent(layerCurrent, currentPostData, currentImageIndex);
-    setLayerContent(layerNext, nextPostData, 0);
-
-    requestAnimationFrame(() => {
-      layerCurrent.style.transition = '';
-      layerNext.style.transition = '';
-    });
-
-    addCustomUI(currentPostData.url, currentPostData.article);
-    preloadImages(currentPostData.images || []);
-    if (nextPostData && nextPostData.images) preloadImages([nextPostData.images[0]]);
-    preloadAdjacentPosts(currentPostData.article);
-
-    // re-init gestures
-    removePointerHandlers();
-    initLayerGestures();
-  }
-
-  // Initialize gestures for layerCurrent (pointer events) — vertical swipe up/down to switch posts
+  // Initialize gestures for layerCurrent (pointer events)
   function initLayerGestures() {
     // remove existing handlers first
     removePointerHandlers();
 
     gesture = { startY: 0, currentY: 0, dragging: false };
 
+    // pointerdown handler
     const onPointerDown = (ev) => {
+      // only primary button / touch
       if (ev.pointerType === 'mouse' && ev.button !== 0) return;
       ev.preventDefault();
       gesture.startY = ev.clientY;
       gesture.currentY = ev.clientY;
       gesture.dragging = true;
+      // temporary remove transitions for direct dragging feel
       layerCurrent.style.transition = 'none';
       layerNext.style.transition = 'none';
     };
 
+    // move handler
     const onPointerMove = (ev) => {
       if (!gesture.dragging) return;
       gesture.currentY = ev.clientY;
       const diff = gesture.currentY - gesture.startY;
       if (diff < 0) {
-        // swipe up -> reveal next (below)
+        // swipe up -> reveal next
         layerCurrent.style.transform = `translateY(${diff}px)`;
         const p = Math.min(1, Math.abs(diff) / window.innerHeight);
         layerNext.style.transform = `translateY(${100 - p * 100}%)`;
       } else {
-        // swipe down -> reveal prev (above) visually by moving current down and revealing layerNext (we'll position layerNext above)
+        // swipe down -> scale + move down
         const scale = Math.max(0.85, 1 - (diff / 1200));
         layerCurrent.style.transform = `translateY(${diff}px) scale(${scale})`;
       }
     };
 
+    // up/cancel handler
     const onPointerUp = async (ev) => {
       if (!gesture.dragging) return;
       gesture.dragging = false;
       const diff = gesture.currentY - gesture.startY;
       const threshold = Math.min(150, window.innerHeight * 0.12);
+      // re-enable smooth transitions
       layerCurrent.style.transition = 'transform .25s ease';
       layerNext.style.transition = 'transform .25s ease';
 
@@ -658,8 +501,9 @@ document.addEventListener("DOMContentLoaded", function () {
         // go to next post
         await switchToNextPost();
       } else if (diff > threshold) {
-        // go to previous post (instead of close)
-        await switchToPrevPost();
+        // close
+        layerCurrent.style.transform = `translateY(100vh) scale(0.9)`;
+        setTimeout(() => closeGallery(), 260);
       } else {
         // reset
         layerCurrent.style.transform = 'translateY(0) scale(1)';
@@ -667,6 +511,7 @@ document.addEventListener("DOMContentLoaded", function () {
       }
     };
 
+    // attach and store handlers for removal later
     pointerHandlers.move = onPointerMove;
     pointerHandlers.up = onPointerUp;
     layerCurrent._pointerDownHandler = onPointerDown;
@@ -677,9 +522,10 @@ document.addEventListener("DOMContentLoaded", function () {
     window.addEventListener('pointercancel', onPointerUp);
   }
 
-  // ========== addCustomUI (kept) ==========
+  // ========== REUSE addCustomUI (slightly adapted) ==========
   let uiVisible = false;
   function addCustomUI(postUrl, article) {
+    // remove existing UI
     const existing = document.querySelector('.gallery-custom-ui');
     if (existing) existing.remove();
 
