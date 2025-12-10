@@ -1,3 +1,100 @@
+// post-view
+
+document.addEventListener("DOMContentLoaded", function () {
+  if (!document.body.classList.contains("post-view")) return;
+
+  // =======================================
+  // Thu thập tất cả ảnh từ <div.separator>
+  // =======================================
+  const images = [];
+  const separators = document.querySelectorAll("div.separator");
+
+  separators.forEach((div, index) => {
+    const link = div.querySelector("a");
+    if (!link || !link.href) return;
+
+    images.push({
+      url: link.href,
+      element: div,
+      index: index
+    });
+
+    // Thay thế bằng ảnh có thể click
+    const img = document.createElement("img");
+    img.src = link.href;
+    img.loading = "lazy";
+    img.style.width = "100%";
+    img.style.display = "block";
+    img.style.cursor = "pointer";
+    img.dataset.imageIndex = index;
+
+    div.innerHTML = "";
+    div.appendChild(img);
+
+    // Click vào ảnh → mở gallery
+    img.addEventListener("click", () => openGallery(index));
+  });
+
+  if (images.length === 0) return;
+
+  // =======================================
+  // Tạo Gallery Container
+  // =======================================
+  const galleryHTML = `
+    <div id="swiper-gallery" style="
+      position: fixed;
+      inset: 0;
+      z-index: 99999;
+      background: #000;
+      display: none;
+    ">
+      <div class="swiper" style="width: 100%; height: 100%;">
+        <div class="swiper-wrapper">
+          ${images.map(img => `
+            <div class="swiper-slide" style="display: flex; align-items: center; justify-content: center;">
+              <img src="${img.url}" style="width: 100%; height: 100%; object-fit: cover; object-position: center; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; pointer-events: none;" draggable="false">
+            </div>
+          `).join('')}
+        </div>
+      </div>
+    </div>
+  `;
+
+  document.body.insertAdjacentHTML("beforeend", galleryHTML);
+
+  const galleryContainer = document.getElementById("swiper-gallery");
+  // =======================================
+  // Khởi tạo Swiper
+  // =======================================
+  let swiper = null;
+  let galleryOpen = false;
+
+  function initSwiper(initialIndex) {
+    if (swiper) {
+      swiper.destroy(true, true);
+    }
+
+    swiper = new Swiper(galleryContainer.querySelector(".swiper"), {
+      direction: "horizontal",
+      loop: images.length > 1,
+      initialSlide: initialIndex,
+      keyboard: {
+        enabled: true
+      }
+    });
+  }
+  function openGallery(index) {
+    initSwiper(index);
+    galleryContainer.style.display = "block";
+    galleryOpen = true;
+    history.pushState({ gallery: true }, "");
+    document.body.style.overflow = "hidden";
+  }
+
+});
+
+//listview
+
 /* ListView - Enhanced Debug Version with Logs */
 
 // ========== DEBUG LOG MANAGER ==========
@@ -984,13 +1081,6 @@ document.addEventListener("DOMContentLoaded", function () {
       direction: 'horizontal',
       loop: shouldLoop,
       loopAdditionalSlides: shouldLoop ? 2 : 0,
-      // THÊM CÁC DÒNG NÀY ↓
-  touchRatio: 1,
-  threshold: 5,
-  touchStartPreventDefault: false,
-  touchMoveStopPropagation: true,
-  nested: true,
-  // HẾT PHẦN THÊM ↑
       on: {
         init: function() {
           const activeIndex = this.realIndex || this.activeIndex;
@@ -1053,77 +1143,88 @@ document.addEventListener("DOMContentLoaded", function () {
 
   async function openGallery(article, skipHistory = false) {
     DebugLog.add('GALLERY', 'openGallery called');
-    
+
     const postUrl = article.querySelector('a[data-post-url]')?.dataset.postUrl;
     if (!postUrl) {
-      DebugLog.add('ERROR', 'openGallery: No postUrl');
-      return;
+        DebugLog.add('ERROR', 'openGallery: No postUrl');
+        return;
     }
 
-    const container = createGalleryContainer();
-    const mainWrapper = container.querySelector('.swiper-main .swiper-wrapper');
-    
+    const container = createGalleryContainer(); // đúng ID
+    const wrapper = container.querySelector('.swiper-main .swiper-wrapper');
+
     const articles = getArticles().filter(a => !a.classList.contains('skeleton'));
     const currentIndex = articles.indexOf(article);
-    
-    DebugLog.add('GALLERY', 'Opening gallery', { 
-      postUrl, 
-      currentIndex,
-      totalArticles: articles.length,
-      existingSlides: mainWrapper.children.length
+
+    DebugLog.add('GALLERY', 'Opening gallery', {
+        postUrl,
+        currentIndex,
+        totalArticles: articles.length,
+        existingSlides: wrapper.children.length
     });
-    
+
     if (currentIndex === -1) {
-      DebugLog.add('ERROR', 'Article not found in list');
-      return;
+        DebugLog.add('ERROR', 'Article not in list');
+        return;
     }
-    
-    let slide = mainWrapper.querySelector(`[data-post-url="${postUrl}"]`);
-    const alreadyLoaded = slide && slide.dataset.loaded === 'true';
-    
-    DebugLog.add('GALLERY', 'Slide status', { 
-      slideExists: !!slide,
-      alreadyLoaded 
-    });
-    
-    if (!alreadyLoaded) {
-      showLoading();
+
+    // --- BƯỚC 1: Nếu slide chưa tạo → tạo ngay ---
+    if (!wrapper.querySelector(`[data-post-url="${postUrl}"]`)) {
+        DebugLog.add('GALLERY', 'Creating slides');
+        articles.forEach(a => {
+            const s = createEmptySlide(a);
+            if (!s) return;
+
+            const url = a.querySelector('a[data-post-url]')?.dataset.postUrl;
+            s.dataset.postUrl = url;
+            s.dataset.loaded = "false";
+
+            wrapper.appendChild(s);
+        });
     }
-    
-    if (mainWrapper.children.length === 0) {
-      DebugLog.add('GALLERY', 'Creating all slides');
-      articles.forEach(art => {
-        const s = createEmptySlide(art);
-        if (s) mainWrapper.appendChild(s);
-      });
-    }
-    
-    const startIdx = Math.max(0, currentIndex - 3);
-    const endIdx = Math.min(articles.length, currentIndex + 4);
-    const articlesToLoad = articles.slice(startIdx, endIdx);
-    
-    DebugLog.add('GALLERY', 'Loading adjacent posts', { 
-      startIdx, 
-      endIdx, 
-      count: articlesToLoad.length 
-    });
-    
-    await Promise.allSettled(
-      articlesToLoad.map(art => loadPostDataForSlide(art))
-    );
-    
+
+    // --- BƯỚC 2: Load dữ liệu cho vùng gần currentIndex ---
+    const start = Math.max(0, currentIndex - 3);
+    const end = Math.min(articles.length, currentIndex + 4);
+    const neighbors = articles.slice(start, end);
+
+    showLoading();
+
+    await Promise.allSettled(neighbors.map(loadPostDataForSlide));
+
     hideLoading();
-    
+
+    // --- BƯỚC 3: Phải update wrapper TRƯỚC khi init swiper ---
+    if (mainSwiper && mainSwiper.update) mainSwiper.update();
+
+    // --- BƯỚC 4: Init Swiper ---
     DebugLog.add('GALLERY', 'Initializing main swiper', { initialIndex: currentIndex });
+
     initMainSwiper(container, currentIndex);
-    
+
+    // --- BƯỚC 5: Show gallery ---
     container.style.display = 'block';
     uiVisible = false;
     
-    DebugLog.add('GALLERY', 'Gallery opened successfully');
+    // THÊM ĐOẠN NÀY ↓
+  // Force khởi tạo nested swiper của slide đầu tiên
+  setTimeout(() => {
+    if (mainSwiper && mainSwiper.slides[currentIndex]) {
+      const activeSlide = mainSwiper.slides[currentIndex];
+      if (activeSlide.postData) {
+        initNestedSwiper(activeSlide, activeSlide.postData);
+        addCustomUI(activeSlide.postData.url, activeSlide.postData.article, activeSlide.postData);
+        DebugLog.add('GALLERY', 'Initial nested swiper initialized');
+      }
+    }
+  }, 100);
+  // HẾT PHẦN THÊM ↑
     
     if (!skipHistory) historyManager.push('gallery');
-  }
+
+    DebugLog.add('GALLERY', 'Gallery fully opened');
+}
+
   
   async function loadMorePosts(swiperInstance) {
     if (!nextPage || loading || !swiperInstance) return;
@@ -1220,7 +1321,7 @@ document.addEventListener("DOMContentLoaded", function () {
     linkBtn.className = 'ui-btn ui-link';
     linkBtn.href = postUrl;
     linkBtn.title = 'Mở bài viết';
-    linkBtn.target = "_blank";
+    linkBtn.target = "_self";
     linkBtn.innerHTML = '<svg width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 1 0-7l2-2a5 5 0 1 1 7 7l-1.5 1.5"/><path d="M14 11a5 5 0 0 1 0 7l-2 2a5 5 0 1 1-7-7l1.5-1.5"/></svg>';
 
     const contentBtn = document.createElement('button');
@@ -1347,7 +1448,7 @@ document.addEventListener("DOMContentLoaded", function () {
       observeArticle(article);
     });
   }
-  
+      
   attachArticleEvents();
 
   setTimeout(() => {
