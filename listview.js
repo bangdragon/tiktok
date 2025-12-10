@@ -1,256 +1,241 @@
-/* ListView */
-alert('ver.5');
+/* ListView - DEBUG VERSION with alerts */
+
 document.addEventListener("DOMContentLoaded", function () {
-  if (!document.body.classList.contains("list-view")) return;
+  alert('✅ DOMContentLoaded fired');
   
-      // ===== Ẩn các nút More Posts =====
-    const hideSelectors = [
-        ".blog-pager",
-        ".blog-pager-older-link",
-        ".load-more",
-        "#blog-pager"
-    ];
-    hideSelectors.forEach(sel => {
-        document.querySelectorAll(sel).forEach(el => {
-            el.style.display = "none";
-            el.style.opacity = "0";
-            el.style.visibility = "hidden";
-        });
-    });
-    // ==================================
-
-    const container = document.querySelector(".list-view .blog-posts.hfeed.container");
-    if (!container) return;
-
-    let nextPage = null;
-    let loading = false;
-
-    function getNextPage() {
-        const pager = document.querySelector(".blog-pager-older-link");
-        if (pager) nextPage = pager.href;
-    }
-    getNextPage();
-
-    function createSkeleton() {
-        const article = document.createElement("article");
-        article.className = "post-outer-container skeleton";
-        article.innerHTML = `
-            <div class="post-outer">
-                <div class="post">
-                        <div class="thumb-image">
-                            <div class="skeleton-box"></div>
-                        </div>
-                    <div class="thumb-title"><span class="thumb-title-inner"></span></div>
-                </div>
-            </div>
-        `;
-        return article;
-    }
-
-    async function loadMore() {
-        if (!nextPage || loading) return;
-        loading = true;
-
-        // append 1 skeleton tạm thời ngay lập tức để người dùng thấy
-        const tempSkeleton = createSkeleton();
-        container.appendChild(tempSkeleton);
-
-        try {
-            const res = await fetch(nextPage);
-            const html = await res.text();
-            const temp = document.createElement("div");
-            temp.innerHTML = html;
-
-            // lấy tất cả bài mới
-            const posts = temp.querySelectorAll(".post-outer-container");
-
-            // Nếu có nhiều hơn 1 bài → thêm skeleton tương ứng
-            const skeletons = [tempSkeleton];
-            for (let i = 1; i < posts.length; i++) {
-                const sk = createSkeleton();
-                container.appendChild(sk);
-                skeletons.push(sk);
-            }
-
-            // Replace skeleton bằng bài thật
-            posts.forEach((post, i) => {
-                if (skeletons[i]) skeletons[i].replaceWith(post);
-                else container.appendChild(post);
-            });
-
-            // cập nhật next page
-            const newPager = temp.querySelector(".blog-pager-older-link");
-            nextPage = newPager ? newPager.href : null;
-
-        } catch (err) {
-            console.error(err);
-        }
-
-        loading = false;
-    }
-
-    window.addEventListener("scroll", function () {
-        if (!nextPage || loading) return;
-        const reachBottom = window.innerHeight + window.scrollY >= document.body.offsetHeight - 500;
-        if (reachBottom) loadMore();
-    });
-
-    // ========== CACHE MANAGER ==========
-  // ========== IMPROVED CACHE MANAGER ==========
-const CACHE_VERSION = 'v4';
-const CACHE_PREFIX = 'tiktok_cache_';
-
-// Image cache với memory + disk
-const imageCache = new Map();
-const imageLoadStatus = new Map();
-
-// Post cache cải tiến với LRU và localStorage backup
-const postCache = {
-  maxSize: 30, // Tăng lên 30 bài
-  cache: new Map(),
-  lastAccess: new Map(),
+  if (!document.body.classList.contains("list-view")) {
+    alert('❌ Không phải trang list-view');
+    return;
+  }
   
-  // Get với update access time
-  get(url) {
-    const data = this.cache.get(url);
-    if (data) {
-      this.lastAccess.set(url, Date.now());
-      return data;
-    }
-    
-    // Fallback to localStorage
+  alert('✅ Đúng trang list-view');
+  
+  // ===== Ẩn các nút More Posts =====
+  const hideSelectors = [".blog-pager", ".blog-pager-older-link", ".load-more", "#blog-pager"];
+  hideSelectors.forEach(sel => {
+    document.querySelectorAll(sel).forEach(el => {
+      el.style.display = "none";
+      el.style.opacity = "0";
+      el.style.visibility = "hidden";
+    });
+  });
+
+  const container = document.querySelector(".list-view .blog-posts.hfeed.container");
+  if (!container) {
+    alert('❌ Không tìm thấy container');
+    return;
+  }
+
+  let nextPage = null;
+  let loading = false;
+
+  function getNextPage() {
+    const pager = document.querySelector(".blog-pager-older-link");
+    if (pager) nextPage = pager.href;
+  }
+  getNextPage();
+
+  function createSkeleton() {
+    const article = document.createElement("article");
+    article.className = "post-outer-container skeleton";
+    article.innerHTML = `
+      <div class="post-outer">
+        <div class="post">
+          <div class="thumb-image">
+            <div class="skeleton-box"></div>
+          </div>
+          <div class="thumb-title"><span class="thumb-title-inner"></span></div>
+        </div>
+      </div>
+    `;
+    return article;
+  }
+
+  async function loadMore() {
+    if (!nextPage || loading) return;
+    loading = true;
+
+    const tempSkeleton = createSkeleton();
+    container.appendChild(tempSkeleton);
+
     try {
-      const stored = localStorage.getItem(CACHE_PREFIX + url);
-      if (stored) {
-        const parsed = JSON.parse(stored);
-        if (parsed.version === CACHE_VERSION && Date.now() - parsed.timestamp < 86400000) { // 24h
-          this.cache.set(url, parsed.data);
-          this.lastAccess.set(url, Date.now());
-          return parsed.data;
-        } else {
-          localStorage.removeItem(CACHE_PREFIX + url);
-        }
+      const res = await fetch(nextPage);
+      const html = await res.text();
+      const temp = document.createElement("div");
+      temp.innerHTML = html;
+
+      const posts = temp.querySelectorAll(".post-outer-container");
+      const skeletons = [tempSkeleton];
+      for (let i = 1; i < posts.length; i++) {
+        const sk = createSkeleton();
+        container.appendChild(sk);
+        skeletons.push(sk);
       }
-    } catch (e) {}
-    
-    return null;
-  },
-  
-  // Set với LRU eviction
-  set(url, data) {
-    // LRU: Remove least recently used
-    if (this.cache.size >= this.maxSize) {
-      let oldestUrl = null;
-      let oldestTime = Infinity;
-      
-      this.lastAccess.forEach((time, u) => {
-        if (time < oldestTime) {
-          oldestTime = time;
-          oldestUrl = u;
-        }
+
+      posts.forEach((post, i) => {
+        if (skeletons[i]) skeletons[i].replaceWith(post);
+        else container.appendChild(post);
       });
-      
-      if (oldestUrl) {
-        this.cache.delete(oldestUrl);
-        this.lastAccess.delete(oldestUrl);
+
+      const newPager = temp.querySelector(".blog-pager-older-link");
+      nextPage = newPager ? newPager.href : null;
+
+    } catch (err) {
+      console.error(err);
+    }
+
+    loading = false;
+  }
+
+  window.addEventListener("scroll", function () {
+    if (!nextPage || loading) return;
+    const reachBottom = window.innerHeight + window.scrollY >= document.body.offsetHeight - 500;
+    if (reachBottom) loadMore();
+  });
+
+  // ========== IMPROVED CACHE MANAGER ==========
+  const CACHE_VERSION = 'v4';
+  const CACHE_PREFIX = 'tiktok_cache_';
+
+  const imageCache = new Map();
+  const imageLoadStatus = new Map();
+
+  const postCache = {
+    maxSize: 30,
+    cache: new Map(),
+    lastAccess: new Map(),
+    
+    get(url) {
+      const data = this.cache.get(url);
+      if (data) {
+        this.lastAccess.set(url, Date.now());
+        return data;
       }
-    }
+      
+      try {
+        const stored = localStorage.getItem(CACHE_PREFIX + url);
+        if (stored) {
+          const parsed = JSON.parse(stored);
+          if (parsed.version === CACHE_VERSION && Date.now() - parsed.timestamp < 86400000) {
+            this.cache.set(url, parsed.data);
+            this.lastAccess.set(url, Date.now());
+            return parsed.data;
+          } else {
+            localStorage.removeItem(CACHE_PREFIX + url);
+          }
+        }
+      } catch (e) {}
+      
+      return null;
+    },
     
-    this.cache.set(url, data);
-    this.lastAccess.set(url, Date.now());
+    set(url, data) {
+      if (this.cache.size >= this.maxSize) {
+        let oldestUrl = null;
+        let oldestTime = Infinity;
+        
+        this.lastAccess.forEach((time, u) => {
+          if (time < oldestTime) {
+            oldestTime = time;
+            oldestUrl = u;
+          }
+        });
+        
+        if (oldestUrl) {
+          this.cache.delete(oldestUrl);
+          this.lastAccess.delete(oldestUrl);
+        }
+      }
+      
+      this.cache.set(url, data);
+      this.lastAccess.set(url, Date.now());
+      this.saveToStorage(url, data);
+    },
     
-    // Backup to localStorage (async, không block)
-    this.saveToStorage(url, data);
-  },
-  
-  // Save to localStorage async
-  saveToStorage(url, data) {
-    try {
-      const payload = {
-        version: CACHE_VERSION,
-        timestamp: Date.now(),
-        data: data
-      };
-      localStorage.setItem(CACHE_PREFIX + url, JSON.stringify(payload));
-    } catch (e) {
-      // Quota exceeded, clear old cache
-      this.clearOldStorage();
-    }
-  },
-  
-  // Clear localStorage cache cũ hơn 24h
-  clearOldStorage() {
-    try {
-      const now = Date.now();
-      Object.keys(localStorage).forEach(key => {
-        if (key.startsWith(CACHE_PREFIX)) {
-          try {
-            const item = JSON.parse(localStorage.getItem(key));
-            if (now - item.timestamp > 86400000) {
+    saveToStorage(url, data) {
+      try {
+        const payload = {
+          version: CACHE_VERSION,
+          timestamp: Date.now(),
+          data: data
+        };
+        localStorage.setItem(CACHE_PREFIX + url, JSON.stringify(payload));
+      } catch (e) {
+        this.clearOldStorage();
+      }
+    },
+    
+    clearOldStorage() {
+      try {
+        const now = Date.now();
+        Object.keys(localStorage).forEach(key => {
+          if (key.startsWith(CACHE_PREFIX)) {
+            try {
+              const item = JSON.parse(localStorage.getItem(key));
+              if (now - item.timestamp > 86400000) {
+                localStorage.removeItem(key);
+              }
+            } catch (e) {
               localStorage.removeItem(key);
             }
-          } catch (e) {
-            localStorage.removeItem(key);
+          }
+        });
+      } catch (e) {}
+    },
+    
+    clear() {
+      this.cache.clear();
+      this.lastAccess.clear();
+    }
+  };
+
+  postCache.clearOldStorage();
+  
+  // ========== INTERSECTION OBSERVER FOR PRELOAD ==========
+  let preloadObserver = null;
+
+  function setupPreloadObserver() {
+    if (preloadObserver) return;
+    
+    preloadObserver = new IntersectionObserver((entries) => {
+      entries.forEach(entry => {
+        if (entry.isIntersecting || entry.intersectionRatio > 0) {
+          const article = entry.target;
+          const postUrl = article.querySelector('a[data-post-url]')?.dataset.postUrl;
+          
+          if (postUrl && !postCache.get(postUrl)) {
+            fetchPostData(postUrl).then(data => {
+              if (data.images && data.images.length > 0) {
+                preloadImages([data.images[0]]);
+              }
+            }).catch(() => {});
           }
         }
       });
-    } catch (e) {}
-  },
-  
-  clear() {
-    this.cache.clear();
-    this.lastAccess.clear();
-  }
-};
-
-// Clear old cache on init
-postCache.clearOldStorage();
-  
-  // ========== INTERSECTION OBSERVER FOR PRELOAD ==========
-let preloadObserver = null;
-
-function setupPreloadObserver() {
-  if (preloadObserver) return;
-  
-  preloadObserver = new IntersectionObserver((entries) => {
-    entries.forEach(entry => {
-      if (entry.isIntersecting || entry.intersectionRatio > 0) {
-        const article = entry.target;
-        const postUrl = article.querySelector('a[data-post-url]')?.dataset.postUrl;
-        
-        if (postUrl && !postCache.get(postUrl)) {
-          // Preload data ngầm
-          fetchPostData(postUrl).then(data => {
-            if (data.images && data.images.length > 0) {
-              preloadImages([data.images[0]]); // Preload ảnh đầu tiên
-            }
-          }).catch(() => {});
-        }
-      }
+    }, {
+      root: null,
+      rootMargin: '300px',
+      threshold: 0
     });
-  }, {
-    root: null,
-    rootMargin: '300px', // Preload khi còn cách 300px
-    threshold: 0
-  });
-}
-
-function observeArticle(article) {
-  if (preloadObserver && !article.classList.contains('skeleton')) {
-    preloadObserver.observe(article);
   }
-}
 
-function unobserveArticle(article) {
-  if (preloadObserver) {
-    preloadObserver.unobserve(article);
+  function observeArticle(article) {
+    if (preloadObserver && !article.classList.contains('skeleton')) {
+      preloadObserver.observe(article);
+    }
   }
-}
+
+  function unobserveArticle(article) {
+    if (preloadObserver) {
+      preloadObserver.unobserve(article);
+    }
+  }
 
   // ========== FETCH POST DATA ==========
   async function fetchPostData(url) {
     const cached = postCache.get(url);
     if (cached) return cached;
+    
     try {
       const res = await fetch(url);
       const html = await res.text();
@@ -301,12 +286,11 @@ function unobserveArticle(article) {
       postCache.set(url, data);
       return data;
     } catch (e) {
-      console.error('Fetch error:', e);
       return { images: [], textContent: '', commentsUrl: null };
     }
   }
 
-  // ========== PRELOAD IMAGES WITH STATUS TRACKING ==========
+  // ========== PRELOAD IMAGES ==========
   function preloadImages(urls) {
     urls.forEach(url => {
       if (!url) return;
@@ -325,7 +309,6 @@ function unobserveArticle(article) {
     });
   }
 
-  // Check if image is in cache
   function isImageCached(url) {
     return imageLoadStatus.get(url) === 'loaded';
   }
@@ -423,10 +406,8 @@ function unobserveArticle(article) {
     const isCached = isImageCached(imgUrl);
     
     if (isCached) {
-      // Image is cached, show directly
       return `<img src="${imgUrl}" alt="Ảnh ${idx + 1}" draggable="false">`;
     } else {
-      // Image not cached, show loader
       return `
         <div class="image-loader-wrapper" data-img-url="${imgUrl}">
           <div class="image-loader">
@@ -460,13 +441,12 @@ function unobserveArticle(article) {
 
   // ========== SWIPER GALLERY MANAGER ==========
   let mainSwiper = null;
-let nestedSwipers = new Map();
-let currentPostData = null;
-let galleryContainer = null;
-let uiVisible = false;
-let isPreloading = false; // Flag để tránh preload trùng lặp
+  let nestedSwipers = new Map();
+  let currentPostData = null;
+  let galleryContainer = null;
+  let uiVisible = false;
+  let isPreloading = false;
 
-  // Tạo gallery container với Swiper
   function createGalleryContainer() {
     if (galleryContainer) return galleryContainer;
     
@@ -490,270 +470,266 @@ let isPreloading = false; // Flag để tránh preload trùng lặp
     return galleryContainer;
   }
   
-  // ========== CREATE EMPTY SLIDE ==========
-function createEmptySlide(article) {
-  const postUrl = article.querySelector('a[data-post-url]')?.dataset.postUrl;
-  if (!postUrl) return null;
-  
-  const mainWrapper = galleryContainer?.querySelector('.swiper-main .swiper-wrapper');
-  if (!mainWrapper) return null;
-  
-  // Check nếu slide đã tồn tại
-  const existingSlide = mainWrapper.querySelector(`[data-post-url="${postUrl}"]`);
-  if (existingSlide) return existingSlide;
-  
-  const slide = document.createElement('div');
-  slide.className = 'swiper-slide';
-  slide.dataset.postUrl = postUrl;
-  slide.dataset.loaded = 'false';
-  slide.dataset.loading = 'false';
-  
-  const nestedId = `nested-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-  slide.innerHTML = `
-    <div class="swiper swiper-nested" id="${nestedId}" data-should-loop="false">
-      <div class="swiper-wrapper">
-        <div class="swiper-slide">
-          <div class="placeholder">Đang tải...</div>
+  function createEmptySlide(article) {
+    const postUrl = article.querySelector('a[data-post-url]')?.dataset.postUrl;
+    if (!postUrl) return null;
+    
+    const mainWrapper = galleryContainer?.querySelector('.swiper-main .swiper-wrapper');
+    if (!mainWrapper) return null;
+    
+    const existingSlide = mainWrapper.querySelector(`[data-post-url="${postUrl}"]`);
+    if (existingSlide) return existingSlide;
+    
+    const slide = document.createElement('div');
+    slide.className = 'swiper-slide';
+    slide.dataset.postUrl = postUrl;
+    slide.dataset.loaded = 'false';
+    slide.dataset.loading = 'false';
+    
+    const nestedId = `nested-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    slide.innerHTML = `
+      <div class="swiper swiper-nested" id="${nestedId}" data-should-loop="false">
+        <div class="swiper-wrapper">
+          <div class="swiper-slide">
+            <div class="placeholder">Đang tải...</div>
+          </div>
         </div>
       </div>
-    </div>
-  `;
-  
-  return slide;
-}
-  // ========== UPDATE NESTED SWIPER SLIDES ==========
-function updateNestedSwiperSlides(nestedSwiper, postData) {
-  if (!nestedSwiper || !postData) return;
-  
-  // Remove all slides
-  nestedSwiper.removeAllSlides();
-  
-  if (postData.images && postData.images.length > 0) {
-    const newSlides = postData.images.map((imgUrl, idx) => {
-      return `<div class="swiper-slide swiper-slide-image">
-        ${createImageWithLoader(imgUrl, idx)}
-      </div>`;
-    });
+    `;
     
-    nestedSwiper.appendSlide(newSlides);
-    preloadImages([postData.images[0]]);
-    
-    // Update loop
-    const shouldLoop = postData.images.length > 1;
-    nestedSwiper.params.loop = shouldLoop;
-    nestedSwiper.params.loopAdditionalSlides = shouldLoop ? 2 : 0;
-    
-    if (shouldLoop) {
-      nestedSwiper.loopDestroy();
-      nestedSwiper.loopCreate();
-    }
-    
-    nestedSwiper.update();
-  } else {
-    nestedSwiper.appendSlide('<div class="swiper-slide"><div class="placeholder">Không có ảnh</div></div>');
+    return slide;
   }
   
-  nestedSwiper.slideTo(0, 0);
-}
-  // ========== LOAD POST DATA FOR SLIDE ==========
-async function loadPostDataForSlide(article) {
-  const postUrl = article.querySelector('a[data-post-url]')?.dataset.postUrl;
-  if (!postUrl) return;
-  
-  const mainWrapper = galleryContainer?.querySelector('.swiper-main .swiper-wrapper');
-  if (!mainWrapper) return;
-  
-  let slide = mainWrapper.querySelector(`[data-post-url="${postUrl}"]`);
-  
-  // Tạo slide nếu chưa có
-  if (!slide) {
-    slide = createEmptySlide(article);
-    if (slide) mainWrapper.appendChild(slide);
-  }
-  
-  // Đã load hoặc đang load thì skip
-  if (slide.dataset.loaded === 'true' || slide.dataset.loading === 'true') {
-    return;
-  }
-  
-  slide.dataset.loading = 'true';
-  
-  try {
-    const postData = await fetchPostData(postUrl);
-    postData.url = postUrl;
-    postData.article = article;
+  function updateNestedSwiperSlides(nestedSwiper, postData) {
+    if (!nestedSwiper || !postData) return;
     
-    const nestedEl = slide.querySelector('.swiper-nested');
-    const nestedId = nestedEl?.id;
-    const existingSwiper = nestedSwipers.get(nestedId);
+    nestedSwiper.removeAllSlides();
     
-    if (!existingSwiper) {
-      // Swiper chưa init → update HTML
-      const nestedWrapper = slide.querySelector('.swiper-wrapper');
-      nestedWrapper.innerHTML = '';
+    if (postData.images && postData.images.length > 0) {
+      const newSlides = postData.images.map((imgUrl, idx) => {
+        return `<div class="swiper-slide swiper-slide-image">
+          ${createImageWithLoader(imgUrl, idx)}
+        </div>`;
+      });
       
-      if (postData.images && postData.images.length > 0) {
-        nestedEl.dataset.shouldLoop = postData.images.length > 1 ? 'true' : 'false';
-        
-        postData.images.forEach((imgUrl, idx) => {
-          const imgSlide = document.createElement('div');
-          imgSlide.className = 'swiper-slide swiper-slide-image';
-          imgSlide.innerHTML = createImageWithLoader(imgUrl, idx);
-          nestedWrapper.appendChild(imgSlide);
-        });
-        
-        preloadImages([postData.images[0]]);
-      } else {
-        nestedWrapper.innerHTML = '<div class="placeholder">Không có ảnh</div>';
+      nestedSwiper.appendSlide(newSlides);
+      preloadImages([postData.images[0]]);
+      
+      const shouldLoop = postData.images.length > 1;
+      nestedSwiper.params.loop = shouldLoop;
+      nestedSwiper.params.loopAdditionalSlides = shouldLoop ? 2 : 0;
+      
+      if (shouldLoop) {
+        nestedSwiper.loopDestroy();
+        nestedSwiper.loopCreate();
       }
+      
+      nestedSwiper.update();
     } else {
-      // Swiper đã init → dùng API
-      updateNestedSwiperSlides(existingSwiper, postData);
+      nestedSwiper.appendSlide('<div class="swiper-slide"><div class="placeholder">Không có ảnh</div></div>');
     }
     
-    slide.dataset.loaded = 'true';
-    slide.postData = postData;
-    
-  } catch (err) {
-    console.error('Load error:', err);
-    slide.dataset.loaded = 'error';
-  } finally {
-    slide.dataset.loading = 'false';
+    nestedSwiper.slideTo(0, 0);
   }
-} 
-
-// ========== PRELOAD ADJACENT SLIDES ==========
-function preloadAdjacentSlides(activeIndex, range = 3) {
-  if (!mainSwiper) return;
   
-  const slides = mainSwiper.slides || [];
-  const articles = getArticles().filter(a => !a.classList.contains('skeleton'));
+  async function loadPostDataForSlide(article) {
+    const postUrl = article.querySelector('a[data-post-url]')?.dataset.postUrl;
+    if (!postUrl) return;
+    
+    const mainWrapper = galleryContainer?.querySelector('.swiper-main .swiper-wrapper');
+    if (!mainWrapper) return;
+    
+    let slide = mainWrapper.querySelector(`[data-post-url="${postUrl}"]`);
+    
+    if (!slide) {
+      slide = createEmptySlide(article);
+      if (slide) mainWrapper.appendChild(slide);
+    }
+    
+    if (slide.dataset.loaded === 'true' || slide.dataset.loading === 'true') {
+      return;
+    }
+    
+    slide.dataset.loading = 'true';
+    
+    try {
+      const postData = await fetchPostData(postUrl);
+      postData.url = postUrl;
+      postData.article = article;
+      
+      const nestedEl = slide.querySelector('.swiper-nested');
+      const nestedId = nestedEl?.id;
+      const existingSwiper = nestedSwipers.get(nestedId);
+      
+      if (!existingSwiper) {
+        const nestedWrapper = slide.querySelector('.swiper-wrapper');
+        nestedWrapper.innerHTML = '';
+        
+        if (postData.images && postData.images.length > 0) {
+          nestedEl.dataset.shouldLoop = postData.images.length > 1 ? 'true' : 'false';
+          
+          postData.images.forEach((imgUrl, idx) => {
+            const imgSlide = document.createElement('div');
+            imgSlide.className = 'swiper-slide swiper-slide-image';
+            imgSlide.innerHTML = createImageWithLoader(imgUrl, idx);
+            nestedWrapper.appendChild(imgSlide);
+          });
+          
+          preloadImages([postData.images[0]]);
+        } else {
+          nestedWrapper.innerHTML = '<div class="placeholder">Không có ảnh</div>';
+        }
+      } else {
+        updateNestedSwiperSlides(existingSwiper, postData);
+      }
+      
+      slide.dataset.loaded = 'true';
+      slide.postData = postData;
+      
+    } catch (err) {
+      slide.dataset.loaded = 'error';
+    } finally {
+      slide.dataset.loading = 'false';
+    }
+  }
   
-  for (let i = -range; i <= range; i++) {
-    if (i === 0) continue;
+  function preloadAdjacentSlides(activeIndex, range = 3) {
+    if (!mainSwiper) return;
     
-    const idx = activeIndex + i;
-    if (idx < 0 || idx >= slides.length) continue;
+    const slides = mainSwiper.slides || [];
+    const articles = getArticles().filter(a => !a.classList.contains('skeleton'));
     
-    const slide = slides[idx];
-    if (slide.dataset.loaded !== 'true' && slide.dataset.loading !== 'true') {
-      const postUrl = slide.dataset.postUrl;
+    for (let i = -range; i <= range; i++) {
+      if (i === 0) continue;
+      
+      const idx = activeIndex + i;
+      if (idx < 0 || idx >= slides.length) continue;
+      
+      const slide = slides[idx];
+      if (slide.dataset.loaded !== 'true' && slide.dataset.loading !== 'true') {
+        const postUrl = slide.dataset.postUrl;
+        const article = articles.find(a => 
+          a.querySelector('a[data-post-url]')?.dataset.postUrl === postUrl
+        );
+        
+        if (article) {
+          loadPostDataForSlide(article).catch(() => {});
+        }
+      }
+    }
+  }
+  
+  function updateCurrentSlide(swiperInstance) {
+    const activeSlide = swiperInstance.slides[swiperInstance.activeIndex];
+    if (!activeSlide) return;
+    
+    const postData = activeSlide.postData;
+    
+    if (!postData || activeSlide.dataset.loaded !== 'true') {
+      const postUrl = activeSlide.dataset.postUrl;
+      const articles = getArticles().filter(a => !a.classList.contains('skeleton'));
       const article = articles.find(a => 
         a.querySelector('a[data-post-url]')?.dataset.postUrl === postUrl
       );
       
       if (article) {
-        loadPostDataForSlide(article).catch(() => {});
+        showLoading();
+        loadPostDataForSlide(article).then(() => {
+          hideLoading();
+          if (activeSlide.postData) {
+            initNestedSwiper(activeSlide, activeSlide.postData);
+            addCustomUI(activeSlide.postData.url, activeSlide.postData.article, activeSlide.postData);
+          }
+        });
       }
+      return;
     }
-  }
-}
-  
-  // ========== UPDATE CURRENT SLIDE ==========
-function updateCurrentSlide(swiperInstance) {
-  const activeSlide = swiperInstance.slides[swiperInstance.activeIndex];
-  if (!activeSlide) return;
-  
-  const postData = activeSlide.postData;
-  
-  if (!postData || activeSlide.dataset.loaded !== 'true') {
-    // Data chưa có, trigger load
-    const postUrl = activeSlide.dataset.postUrl;
-    const articles = getArticles().filter(a => !a.classList.contains('skeleton'));
-    const article = articles.find(a => 
-      a.querySelector('a[data-post-url]')?.dataset.postUrl === postUrl
-    );
     
-    if (article) {
-      showLoading();
-      loadPostDataForSlide(article).then(() => {
-        hideLoading();
-        if (activeSlide.postData) {
-          initNestedSwiper(activeSlide, activeSlide.postData);
-          addCustomUI(activeSlide.postData.url, activeSlide.postData.article, activeSlide.postData);
-        }
-      });
-    }
-    return;
+    initNestedSwiper(activeSlide, postData);
+    addCustomUI(postData.url, postData.article, postData);
   }
   
-  // Data đã có
-  initNestedSwiper(activeSlide, postData);
-  addCustomUI(postData.url, postData.article, postData);
-}
-
-
-// ========== INIT MAIN SWIPER ==========
-function initMainSwiper(container, initialIndex = 0) {
-  if (mainSwiper) {
-    mainSwiper.slideTo(initialIndex, 0);
-    updateCurrentSlide(mainSwiper);
+  function initMainSwiper(container, initialIndex = 0) {
+    if (mainSwiper) {
+      mainSwiper.slideTo(initialIndex, 0);
+      updateCurrentSlide(mainSwiper);
+      return mainSwiper;
+    }
+    
+    mainSwiper = new Swiper(container.querySelector('.swiper-main'), {
+      direction: 'vertical',
+      loop: false,
+      speed: 350,
+      initialSlide: initialIndex,
+      touchRatio: 1,
+      threshold: 10,
+      resistance: true,
+      resistanceRatio: 0.5,
+      on: {
+        init: function() {
+          updateCurrentSlide(this);
+        },
+        slideChange: function() {
+          updateCurrentSlide(this);
+          preloadAdjacentSlides(this.activeIndex, 3);
+          
+          if (this.activeIndex >= this.slides.length - 2) {
+            loadMorePosts(this);
+          }
+        }
+      }
+    });
+    
     return mainSwiper;
   }
   
-  mainSwiper = new Swiper(container.querySelector('.swiper-main'), {
-    direction: 'vertical',
-    loop: false,
-    speed: 350,
-    initialSlide: initialIndex,
-    touchRatio: 1,
-    threshold: 10,
-    resistance: true,
-    resistanceRatio: 0.5,
-    on: {
-      init: function() {
-        updateCurrentSlide(this);
-      },
-      slideChange: function() {
-        updateCurrentSlide(this);
-        preloadAdjacentSlides(this.activeIndex, 3);
-        
-        // Load more nếu gần hết
-        if (this.activeIndex >= this.slides.length - 2) {
-          loadMorePosts(this);
-        }
-      }
+  async function preloadInitialPosts() {
+    if (isPreloading) {
+      alert('⚠️ Đang preload rồi');
+      return;
     }
-  });
+    isPreloading = true;
+    
+    const articles = getArticles().filter(a => !a.classList.contains('skeleton'));
+    alert(`📦 Tìm thấy ${articles.length} bài viết`);
+    
+    const first10 = articles.slice(0, 10);
+    alert(`🎯 Chọn ${first10.length} bài để preload`);
+    
+    if (first10.length === 0) {
+      alert('❌ Không có bài viết');
+      isPreloading = false;
+      return;
+    }
+    
+    const container = createGalleryContainer();
+    const mainWrapper = container.querySelector('.swiper-main .swiper-wrapper');
+    
+    if (!mainWrapper) {
+      alert('❌ Không tạo được mainWrapper');
+      isPreloading = false;
+      return;
+    }
+    
+    first10.forEach(article => {
+      const slide = createEmptySlide(article);
+      if (slide) mainWrapper.appendChild(slide);
+    });
+    
+    alert(`✅ Đã tạo ${mainWrapper.children.length} slides`);
+    
+    const promises = first10.map((article, index) => 
+      loadPostDataForSlide(article)
+        .then(() => {})
+        .catch(err => {})
+    );
+    
+    await Promise.allSettled(promises);
+    alert('⚡ Preload hoàn tất!');
+    
+    isPreloading = false;
+  }
   
-  return mainSwiper;
-}
-
-  // ========== PRELOAD INITIAL POSTS ==========
-async function preloadInitialPosts() {
-  if (isPreloading) return;
-  isPreloading = true;
-  
-  const articles = getArticles().filter(a => !a.classList.contains('skeleton'));
-  const first10 = articles.slice(0, 10);
-  
-  console.log('🚀 Preloading', first10.length, 'bài viết...');
-  
-  // Tạo gallery container ngay (nhưng ẩn)
-  const container = createGalleryContainer();
-  const mainWrapper = container.querySelector('.swiper-main .swiper-wrapper');
-  
-  // Tạo empty slides
-  first10.forEach(article => {
-    const slide = createEmptySlide(article);
-    if (slide) mainWrapper.appendChild(slide);
-  });
-  
-  // Load dữ liệu song song
-  const promises = first10.map((article, index) => 
-    loadPostDataForSlide(article)
-      .then(() => console.log(`✅ ${index + 1}/10`))
-      .catch(err => console.error(`❌ ${index + 1}/10:`, err))
-  );
-  
-  await Promise.allSettled(promises);
-  console.log('⚡ Preload hoàn tất');
-  
-  isPreloading = false;
-}
-
-  
-  // Khởi tạo nested swiper cho ảnh
   function initNestedSwiper(slideEl, postData) {
     const nestedEl = slideEl.querySelector('.swiper-nested');
     if (!nestedEl || nestedSwipers.has(nestedEl.id)) return;
@@ -762,12 +738,10 @@ async function preloadInitialPosts() {
 
     const nested = new Swiper(nestedEl, {
       direction: 'horizontal',
-      loop: shouldLoop, // Enable loop
-      loopAdditionalSlides: shouldLoop ? 2 : 0, // Preload 2 slides for smooth loop
-      // Pagination is removed - không hiển thị số slide nữa
+      loop: shouldLoop,
+      loopAdditionalSlides: shouldLoop ? 2 : 0,
       on: {
         init: function() {
-          // Preload adjacent images
           const activeIndex = this.realIndex || this.activeIndex;
           if (postData.images[activeIndex - 1]) preloadImages([postData.images[activeIndex - 1]]);
           if (postData.images[activeIndex + 1]) preloadImages([postData.images[activeIndex + 1]]);
@@ -783,7 +757,6 @@ async function preloadInitialPosts() {
     nestedSwipers.set(nestedEl.id, nested);
   }
 
-  // Preload bài viết lân cận
   async function preloadAdjacentPosts(article) {
     const nextArticle = getNextArticle(article);
     const prevArticle = getPrevArticle(article);
@@ -806,90 +779,87 @@ async function preloadInitialPosts() {
     Promise.all(tasks).catch(() => {});
   }
 
-  // Mở gallery từ article// ========== OPEN GALLERY (REFACTORED) ==========
-async function openGallery(article, skipHistory = false) {
-  const postUrl = article.querySelector('a[data-post-url]')?.dataset.postUrl;
-  if (!postUrl) return;
+  async function openGallery(article, skipHistory = false) {
+    alert('🎬 openGallery được gọi');
+    
+    const postUrl = article.querySelector('a[data-post-url]')?.dataset.postUrl;
+    if (!postUrl) {
+      alert('❌ Không có postUrl');
+      return;
+    }
 
-  const container = createGalleryContainer();
-  const mainWrapper = container.querySelector('.swiper-main .swiper-wrapper');
-  
-  const articles = getArticles().filter(a => !a.classList.contains('skeleton'));
-  const currentIndex = articles.indexOf(article);
-  
-  if (currentIndex === -1) return;
-  
-  // Check xem đã có slide chưa
-  let slide = mainWrapper.querySelector(`[data-post-url="${postUrl}"]`);
-  const alreadyLoaded = slide && slide.dataset.loaded === 'true';
-  
-  // Chỉ hiện loading nếu chưa có data
-  if (!alreadyLoaded) {
-    showLoading();
+    const container = createGalleryContainer();
+    const mainWrapper = container.querySelector('.swiper-main .swiper-wrapper');
+    
+    const articles = getArticles().filter(a => !a.classList.contains('skeleton'));
+    const currentIndex = articles.indexOf(article);
+    
+    alert(`📍 Index: ${currentIndex}, Slides: ${mainWrapper.children.length}`);
+    
+    if (currentIndex === -1) {
+      alert('❌ Không tìm thấy article');
+      return;
+    }
+    
+    let slide = mainWrapper.querySelector(`[data-post-url="${postUrl}"]`);
+    const alreadyLoaded = slide && slide.dataset.loaded === 'true';
+    
+    alert(`💾 Đã load: ${alreadyLoaded}`);
+    
+    if (!alreadyLoaded) {
+      showLoading();
+    }
+    
+    if (mainWrapper.children.length === 0) {
+      alert('🔨 Tạo slides cho tất cả bài');
+      articles.forEach(art => {
+        const s = createEmptySlide(art);
+        if (s) mainWrapper.appendChild(s);
+      });
+    }
+    
+    const startIdx = Math.max(0, currentIndex - 3);
+    const endIdx = Math.min(articles.length, currentIndex + 4);
+    const articlesToLoad = articles.slice(startIdx, endIdx);
+    
+    await Promise.allSettled(
+      articlesToLoad.map(art => loadPostDataForSlide(art))
+    );
+    
+    hideLoading();
+    
+    initMainSwiper(container, currentIndex);
+    
+    container.style.display = 'block';
+    uiVisible = false;
+    
+    if (!skipHistory) historyManager.push('gallery');
   }
   
-  // Nếu chưa có slides, tạo structure cho tất cả
-  if (mainWrapper.children.length === 0) {
-    articles.forEach(art => {
-      const s = createEmptySlide(art);
-      if (s) mainWrapper.appendChild(s);
+  async function loadMorePosts(swiperInstance) {
+    if (!nextPage || loading || !swiperInstance) return;
+    
+    const currentSlideCount = swiperInstance.slides.length;
+    
+    await loadMore();
+    
+    const articles = getArticles().filter(a => !a.classList.contains('skeleton'));
+    const newArticles = articles.slice(currentSlideCount);
+    
+    if (newArticles.length === 0) return;
+    
+    newArticles.forEach(article => {
+      const newSlide = createEmptySlide(article);
+      if (newSlide) {
+        swiperInstance.appendSlide(newSlide);
+      }
+    });
+    
+    newArticles.slice(0, 3).forEach(article => {
+      loadPostDataForSlide(article).catch(() => {});
     });
   }
-  
-  // Load data cho bài hiện tại + lân cận
-  const startIdx = Math.max(0, currentIndex - 3);
-  const endIdx = Math.min(articles.length, currentIndex + 4);
-  const articlesToLoad = articles.slice(startIdx, endIdx);
-  
-  await Promise.allSettled(
-    articlesToLoad.map(art => loadPostDataForSlide(art))
-  );
-  
-  hideLoading();
-  
-  // Init hoặc update main swiper
-  initMainSwiper(container, currentIndex);
-  
-  container.style.display = 'block';
-  uiVisible = false;
-  
-  if (!skipHistory) historyManager.push('gallery');
-}
-  
 
-  // ========== LOAD MORE POSTS (REFACTORED) ==========
-async function loadMorePosts(swiperInstance) {
-  if (!nextPage || loading || !swiperInstance) return;
-  
-  // Lưu số slides hiện tại
-  const currentSlideCount = swiperInstance.slides.length;
-  
-  // Load thêm bài từ pagination
-  await loadMore();
-  
-  // Lấy các bài mới
-  const articles = getArticles().filter(a => !a.classList.contains('skeleton'));
-  const newArticles = articles.slice(currentSlideCount);
-  
-  if (newArticles.length === 0) return;
-  
-  console.log('📦 Thêm', newArticles.length, 'bài mới vào gallery');
-  
-  // Tạo slides cho bài mới
-  newArticles.forEach(article => {
-    const newSlide = createEmptySlide(article);
-    if (newSlide) {
-      swiperInstance.appendSlide(newSlide);
-    }
-  });
-  
-  // Preload 3 bài đầu của batch mới
-  newArticles.slice(0, 3).forEach(article => {
-    loadPostDataForSlide(article).catch(() => {});
-  });
-}
-
-  // Đóng gallery
   function closeGallery() {
     if (!galleryContainer) return;
 
@@ -916,12 +886,11 @@ async function loadMorePosts(swiperInstance) {
 
       const existingUI = document.querySelector('.gallery-custom-ui');
       if (existingUI) existingUI.remove();
-      // THÊM: Reset flag
-    isPreloading = false;
+      
+      isPreloading = false;
     }, 300);
   }
 
-  // ========== CUSTOM UI ==========
   function addCustomUI(postUrl, article, postData) {
     const existing = document.querySelector('.gallery-custom-ui');
     if (existing) existing.remove();
@@ -967,44 +936,35 @@ async function loadMorePosts(swiperInstance) {
     [reloadBtn, commentBtn, linkBtn, contentBtn].forEach(b => b.style.display = 'none');
 
     reloadBtn.addEventListener('click', async () => {
-  // Clear cache cho URL này
-  postCache.cache.delete(postUrl);
-  postCache.lastAccess.delete(postUrl);
-  
-  if (mainSwiper) {
-    const activeSlide = mainSwiper.slides[mainSwiper.activeIndex];
-    if (activeSlide && activeSlide.dataset.postUrl === postUrl) {
-      // Reset slide state
-      activeSlide.dataset.loaded = 'false';
-      activeSlide.dataset.loading = 'false';
-      activeSlide.postData = null;
+      postCache.cache.delete(postUrl);
+      postCache.lastAccess.delete(postUrl);
       
-      // Destroy nested swiper nếu có
-      const nestedEl = activeSlide.querySelector('.swiper-nested');
-      if (nestedEl && nestedSwipers.has(nestedEl.id)) {
-        nestedSwipers.get(nestedEl.id).destroy(true, true);
-        nestedSwipers.delete(nestedEl.id);
+      if (mainSwiper) {
+        const activeSlide = mainSwiper.slides[mainSwiper.activeIndex];
+        if (activeSlide && activeSlide.dataset.postUrl === postUrl) {
+          activeSlide.dataset.loaded = 'false';
+          activeSlide.dataset.loading = 'false';
+          activeSlide.postData = null;
+          
+          const nestedEl = activeSlide.querySelector('.swiper-nested');
+          if (nestedEl && nestedSwipers.has(nestedEl.id)) {
+            nestedSwipers.get(nestedEl.id).destroy(true, true);
+            nestedSwipers.delete(nestedEl.id);
+          }
+          
+          showLoading();
+          await loadPostDataForSlide(article);
+          hideLoading();
+          
+          if (activeSlide.postData) {
+            initNestedSwiper(activeSlide, activeSlide.postData);
+            addCustomUI(activeSlide.postData.url, activeSlide.postData.article, activeSlide.postData);
+          }
+          
+          alert("Đã tải lại bài viết");
+        }
       }
-      
-      // Show loading
-      showLoading();
-      
-      // Reload data
-      await loadPostDataForSlide(article);
-      
-      // Hide loading
-      hideLoading();
-      
-      // Re-init nested swiper với data mới
-      if (activeSlide.postData) {
-        initNestedSwiper(activeSlide, activeSlide.postData);
-        addCustomUI(activeSlide.postData.url, activeSlide.postData.article, activeSlide.postData);
-      }
-      
-      alert("Đã tải lại bài viết");
-    }
-  }
-});
+    });
 
     commentBtn.addEventListener('click', () => { 
       window.location.href = postUrl + "#comments"; 
@@ -1044,7 +1004,6 @@ async function loadMorePosts(swiperInstance) {
     toggleBtn.addEventListener('touchstart', toggleUIHandler, true);
   }
 
-  // ========== ATTACH EVENTS TO ARTICLES ==========
   function attachArticleEvents() {
     const articles = document.querySelectorAll('article');
     articles.forEach(article => {
@@ -1061,41 +1020,42 @@ async function loadMorePosts(swiperInstance) {
           return false;
         }, true);
       });
-      // ✅ Di chuyển vào trong forEach
-    observeArticle(article);
+      
+      observeArticle(article);
     });
   }
   
   setTimeout(() => {
-  attachArticleEvents();
-  setupPreloadObserver(); // Setup observer
-  
-  // Preload 10 bài đầu tiên
-  setTimeout(preloadInitialPosts, 1000);
-}, 500);
+    alert('⏰ Bắt đầu setup sau 500ms...');
+    attachArticleEvents();
+    setupPreloadObserver();
+    
+    setTimeout(() => {
+      alert('⏰ Gọi preloadInitialPosts sau 1s...');
+      preloadInitialPosts();
+    }, 1000);
+  }, 500);
 
   const observer = new MutationObserver((mutations) => {
-  let hasNew = false;
-  mutations.forEach(m => {
-    m.addedNodes.forEach(n => {
-      if (n.nodeType === 1 && (n.tagName === 'ARTICLE' || (n.querySelector && n.querySelector('article')))) {
-        hasNew = true;
-      }
+    let hasNew = false;
+    mutations.forEach(m => {
+      m.addedNodes.forEach(n => {
+        if (n.nodeType === 1 && (n.tagName === 'ARTICLE' || (n.querySelector && n.querySelector('article')))) {
+          hasNew = true;
+        }
+      });
     });
+    if (hasNew) {
+      setTimeout(() => {
+        attachArticleEvents();
+        const newArticles = document.querySelectorAll('article:not([data-gallery-attached])');
+        newArticles.forEach(observeArticle);
+      }, 300);
+    }
   });
-  if (hasNew) {
-    setTimeout(() => {
-      attachArticleEvents();
-      // Observe các article mới
-      const newArticles = document.querySelectorAll('article:not([data-gallery-attached])');
-      newArticles.forEach(observeArticle);
-    }, 300);
-  }
-});
   
   observer.observe(document.body, { childList: true, subtree: true });
 
-  // Expose functions
   window.__myGallery = { 
     openGallery, 
     closeGallery, 
