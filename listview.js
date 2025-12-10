@@ -1,5 +1,5 @@
 /* ListView */
-
+alert('v4');
 document.addEventListener("DOMContentLoaded", function () {
   if (!document.body.classList.contains("list-view")) return;
   
