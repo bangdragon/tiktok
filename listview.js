@@ -905,22 +905,6 @@ document.addEventListener("DOMContentLoaded", function () {
         }
       }
     });
-    // FIX: đảm bảo mainSwiper đã update và gọi updateCurrentSlide cho initialIndex
-setTimeout(() => {
-    try {
-        mainSwiper.update();
-        mainSwiper.updateSlides();
-        mainSwiper.slideTo(initialIndex, 0); // đảm bảo active slide đúng
-        // gọi updateCurrentSlide để init nested swiper + UI cho slide hiện tại ngay lập tức
-        if (typeof updateCurrentSlide === 'function') {
-            updateCurrentSlide(initialIndex);
-        } else {
-            DebugLog && DebugLog.add && DebugLog.add('WARN', 'updateCurrentSlide not found when forcing init for initialIndex', { initialIndex });
-        }
-    } catch (e) {
-        console.error('mainSwiper post-init error', e);
-    }
-}, 50);
 
     
     return mainSwiper;
@@ -999,8 +983,6 @@ setTimeout(() => {
     const nested = new Swiper(nestedEl, {
       direction: 'horizontal',
       loop: shouldLoop,
-      observer: true,
-      observeParents: true,
       loopAdditionalSlides: shouldLoop ? 2 : 0,
       on: {
         init: function() {
@@ -1036,23 +1018,6 @@ setTimeout(() => {
       }
     });
     
-    // FIX: thêm options cho observer & đảm bảo nested hoàn toàn init
-// nếu chưa có, thêm observer vào config phía trên cũng được.
-// Sau khi tạo, cập nhật và bật touch ngay để nested nhận swipe ngang.
-try {
-    // đảm bảo observer nếu cần: (nếu config chưa có observer/observeParents, thêm vào bên trên)
-    nested.update && nested.update();
-    nested.updateSlides && nested.updateSlides();
-    // đặt lại slide index inner về 0 để tránh trạng thái lạ
-    if (nested.slideTo) nested.slideTo(0, 0);
-    // bật cho phép touch (trường hợp trước đó bị tắt)
-    nested.allowTouchMove = true;
-    // log debug
-    DebugLog && DebugLog.add && DebugLog.add('SWIPER', 'Nested post-init update/allowTouchMove', { id: nestedEl.id || nestedEl });
-} catch (e) {
-    console.error('nested swiper post-init error', e);
-}
-
 
     nestedSwipers.set(nestedEl.id, nested);
   }
@@ -1376,9 +1341,10 @@ try {
     });
   }
   
+  attachArticleEvents();
+
   setTimeout(() => {
     DebugLog.add('INIT', 'Starting setup after 500ms delay');
-    attachArticleEvents();
     setupPreloadObserver();
     
     setTimeout(() => {
