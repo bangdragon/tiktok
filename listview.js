@@ -682,38 +682,6 @@ function updateCurrentSlide(swiperInstance) {
   addCustomUI(postData.url, postData.article, postData);
 }
 
-// ========== UPDATE CURRENT SLIDE ==========
-function updateCurrentSlide(swiperInstance) {
-  const activeSlide = swiperInstance.slides[swiperInstance.activeIndex];
-  if (!activeSlide) return;
-  
-  const postData = activeSlide.postData;
-  
-  if (!postData || activeSlide.dataset.loaded !== 'true') {
-    // Data chưa có, trigger load
-    const postUrl = activeSlide.dataset.postUrl;
-    const articles = getArticles().filter(a => !a.classList.contains('skeleton'));
-    const article = articles.find(a => 
-      a.querySelector('a[data-post-url]')?.dataset.postUrl === postUrl
-    );
-    
-    if (article) {
-      showLoading();
-      loadPostDataForSlide(article).then(() => {
-        hideLoading();
-        if (activeSlide.postData) {
-          initNestedSwiper(activeSlide, activeSlide.postData);
-          addCustomUI(activeSlide.postData.url, activeSlide.postData.article, activeSlide.postData);
-        }
-      });
-    }
-    return;
-  }
-  
-  // Data đã có
-  initNestedSwiper(activeSlide, postData);
-  addCustomUI(postData.url, postData.article, postData);
-}
 
 // ========== INIT MAIN SWIPER ==========
 function initMainSwiper(container, initialIndex = 0) {
@@ -783,41 +751,6 @@ async function preloadInitialPosts() {
   
   isPreloading = false;
 }
-
-  
-  // ========== PRELOAD INITIAL POSTS ==========
-async function preloadInitialPosts() {
-  if (isPreloading) return;
-  isPreloading = true;
-  
-  const articles = getArticles().filter(a => !a.classList.contains('skeleton'));
-  const first10 = articles.slice(0, 10);
-  
-  console.log('🚀 Preloading', first10.length, 'bài viết...');
-  
-  // Tạo gallery container ngay (nhưng ẩn)
-  const container = createGalleryContainer();
-  const mainWrapper = container.querySelector('.swiper-main .swiper-wrapper');
-  
-  // Tạo empty slides
-  first10.forEach(article => {
-    const slide = createEmptySlide(article);
-    if (slide) mainWrapper.appendChild(slide);
-  });
-  
-  // Load dữ liệu song song
-  const promises = first10.map((article, index) => 
-    loadPostDataForSlide(article)
-      .then(() => console.log(`✅ ${index + 1}/10`))
-      .catch(err => console.error(`❌ ${index + 1}/10:`, err))
-  );
-  
-  await Promise.allSettled(promises);
-  console.log('⚡ Preload hoàn tất');
-  
-  isPreloading = false;
-}
-
 
   
   // Khởi tạo nested swiper cho ảnh
@@ -1034,24 +967,44 @@ async function loadMorePosts(swiperInstance) {
     [reloadBtn, commentBtn, linkBtn, contentBtn].forEach(b => b.style.display = 'none');
 
     reloadBtn.addEventListener('click', async () => {
-      postCache.cache.delete(postUrl);
-      showLoading();
-      const newData = await fetchPostData(postUrl);
-      hideLoading();
-      alert("Đã tải lại bài viết");
+  // Clear cache cho URL này
+  postCache.cache.delete(postUrl);
+  postCache.lastAccess.delete(postUrl);
+  
+  if (mainSwiper) {
+    const activeSlide = mainSwiper.slides[mainSwiper.activeIndex];
+    if (activeSlide && activeSlide.dataset.postUrl === postUrl) {
+      // Reset slide state
+      activeSlide.dataset.loaded = 'false';
+      activeSlide.dataset.loading = 'false';
+      activeSlide.postData = null;
       
-      // Refresh current slide
-      if (mainSwiper) {
-        const activeSlide = mainSwiper.slides[mainSwiper.activeIndex];
-        if (activeSlide && activeSlide.dataset.postUrl === postUrl) {
-          newData.url = postUrl;
-          newData.article = article;
-          const newSlideEl = createPostSlide(newData, article);
-          activeSlide.innerHTML = newSlideEl.innerHTML;
-          initNestedSwiper(activeSlide, newData);
-        }
+      // Destroy nested swiper nếu có
+      const nestedEl = activeSlide.querySelector('.swiper-nested');
+      if (nestedEl && nestedSwipers.has(nestedEl.id)) {
+        nestedSwipers.get(nestedEl.id).destroy(true, true);
+        nestedSwipers.delete(nestedEl.id);
       }
-    });
+      
+      // Show loading
+      showLoading();
+      
+      // Reload data
+      await loadPostDataForSlide(article);
+      
+      // Hide loading
+      hideLoading();
+      
+      // Re-init nested swiper với data mới
+      if (activeSlide.postData) {
+        initNestedSwiper(activeSlide, activeSlide.postData);
+        addCustomUI(activeSlide.postData.url, activeSlide.postData.article, activeSlide.postData);
+      }
+      
+      alert("Đã tải lại bài viết");
+    }
+  }
+});
 
     commentBtn.addEventListener('click', () => { 
       window.location.href = postUrl + "#comments"; 
@@ -1108,10 +1061,9 @@ async function loadMorePosts(swiperInstance) {
           return false;
         }, true);
       });
-    });
-    
-    // THÊM DÒNG NÀY: Observe article để preload
+      // ✅ Di chuyển vào trong forEach
     observeArticle(article);
+    });
   }
   
   setTimeout(() => {
