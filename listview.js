@@ -411,13 +411,26 @@ document.addEventListener("DOMContentLoaded", function () {
     closeDrawer();
     const drawer = document.createElement('div');
     drawer.className = 'custom-drawer';
-    const heightClass = type === 'content' ? 'drawer-90' : '';
+    const heightClass = type === 'content' || type === 'debug' ? 'drawer-90' : '';
+    
+    let headerContent = '';
+    if (type === 'debug') {
+      headerContent = `
+        <h3 style="margin:0;font-size:16px;font-weight:600">Debug Logs</h3>
+        <div style="display:flex;gap:8px;align-items:center">
+          <button class="debug-copy-btn" title="Copy logs">📋</button>
+          <button class="debug-clear-btn" title="Clear logs">🗑️</button>
+          <button class="drawer-close">✕</button>
+        </div>
+      `;
+    } else {
+      headerContent = '<button class="drawer-close">✕</button>';
+    }
+    
     drawer.innerHTML = `
       <div class="drawer-overlay"></div>
       <div class="drawer-content ${heightClass}">
-        <div class="drawer-header">
-          <button class="drawer-close">✕</button>
-        </div>
+        <div class="drawer-header">${headerContent}</div>
         <div class="drawer-body">${content}</div>
       </div>
     `;
@@ -444,6 +457,36 @@ document.addEventListener("DOMContentLoaded", function () {
     
     overlay.addEventListener('click', closeDrawer);
     closeBtn.addEventListener('click', closeDrawer);
+    
+    // Attach debug-specific handlers
+    if (type === 'debug') {
+      const copyBtn = drawer.querySelector('.debug-copy-btn');
+      const clearBtn = drawer.querySelector('.debug-clear-btn');
+      
+      if (copyBtn) {
+        copyBtn.addEventListener('click', () => {
+          const text = DebugLog.export();
+          navigator.clipboard.writeText(text).then(() => {
+            copyBtn.textContent = '✅';
+            setTimeout(() => { copyBtn.textContent = '📋'; }, 1000);
+            DebugLog.add('DEBUG_UI', 'Logs copied to clipboard');
+          }).catch(err => {
+            DebugLog.add('ERROR', 'Failed to copy logs', { error: err.message });
+          });
+        });
+      }
+      
+      if (clearBtn) {
+        clearBtn.addEventListener('click', () => {
+          if (confirm('Clear all logs?')) {
+            DebugLog.clear();
+            closeDrawer();
+            DebugLog.add('DEBUG_UI', 'Logs cleared by user');
+          }
+        });
+      }
+    }
+    
     historyManager.push('drawer');
   }
   
@@ -456,50 +499,27 @@ document.addEventListener("DOMContentLoaded", function () {
   // ========== DEBUG DRAWER ==========
   function createDebugDrawer() {
     DebugLog.add('DEBUG_UI', 'Opening debug drawer');
-    closeDrawer();
     
-    const drawer = document.createElement('div');
-    drawer.className = 'custom-drawer debug-drawer';
-    drawer.innerHTML = `
-      <div class="drawer-overlay"></div>
-      <div class="drawer-content drawer-90">
-        <div class="drawer-header">
-          <h3 style="margin:0;font-size:16px;font-weight:600">Debug Logs</h3>
-          <div style="display:flex;gap:8px">
-            <button class="debug-copy-btn" title="Copy logs">📋</button>
-            <button class="debug-clear-btn" title="Clear logs">🗑️</button>
-            <button class="drawer-close">✕</button>
-          </div>
-        </div>
-        <div class="drawer-body" style="padding:0">
-          <div class="debug-log-container"></div>
-        </div>
-      </div>
-    `;
-    document.body.appendChild(drawer);
-    currentDrawer = drawer;
-    
-    const logContainer = drawer.querySelector('.debug-log-container');
     const logs = DebugLog.getAll();
+    let logHTML = '';
     
     if (logs.length === 0) {
-      logContainer.innerHTML = '<div style="padding:20px;text-align:center;opacity:0.6">No logs yet</div>';
+      logHTML = '<div style="padding:20px;text-align:center;opacity:0.6">No logs yet</div>';
     } else {
-      logContainer.innerHTML = logs.map(log => {
-        const categoryColor = {
-          'INIT': '#4CAF50',
-          'CLICK': '#2196F3',
-          'GALLERY': '#9C27B0',
-          'SWIPER': '#FF9800',
-          'UI': '#00BCD4',
-          'FETCH': '#FFC107',
-          'CACHE': '#8BC34A',
-          'ERROR': '#F44336',
-          'SYSTEM': '#607D8B'
-        };
-        
+      const categoryColor = {
+        'INIT': '#4CAF50',
+        'CLICK': '#2196F3',
+        'GALLERY': '#9C27B0',
+        'SWIPER': '#FF9800',
+        'UI': '#00BCD4',
+        'FETCH': '#FFC107',
+        'CACHE': '#8BC34A',
+        'ERROR': '#F44336',
+        'SYSTEM': '#607D8B'
+      };
+      
+      logHTML = `<div class="debug-log-container">${logs.map(log => {
         const color = categoryColor[log.category] || '#999';
-        
         return `
           <div class="debug-log-entry">
             <div class="debug-log-header">
@@ -510,42 +530,18 @@ document.addEventListener("DOMContentLoaded", function () {
             ${log.data ? `<pre class="debug-log-data">${JSON.stringify(log.data, null, 2)}</pre>` : ''}
           </div>
         `;
-      }).join('');
+      }).join('')}</div>`;
     }
     
-    requestAnimationFrame(() => {
-      drawer.classList.add('active');
-      logContainer.scrollTop = logContainer.scrollHeight;
-    });
+    createDrawer('debug', logHTML);
     
-    const overlay = drawer.querySelector('.drawer-overlay');
-    const closeBtn = drawer.querySelector('.drawer-close');
-    const copyBtn = drawer.querySelector('.debug-copy-btn');
-    const clearBtn = drawer.querySelector('.debug-clear-btn');
-    
-    overlay.addEventListener('click', closeDrawer);
-    closeBtn.addEventListener('click', closeDrawer);
-    
-    copyBtn.addEventListener('click', () => {
-      const text = DebugLog.export();
-      navigator.clipboard.writeText(text).then(() => {
-        copyBtn.textContent = '✅';
-        setTimeout(() => { copyBtn.textContent = '📋'; }, 1000);
-        DebugLog.add('DEBUG_UI', 'Logs copied to clipboard');
-      }).catch(err => {
-        DebugLog.add('ERROR', 'Failed to copy logs', { error: err.message });
-      });
-    });
-    
-    clearBtn.addEventListener('click', () => {
-      if (confirm('Clear all logs?')) {
-        DebugLog.clear();
-        closeDrawer();
-        DebugLog.add('DEBUG_UI', 'Logs cleared by user');
+    // Auto-scroll to bottom
+    setTimeout(() => {
+      const logContainer = document.querySelector('.debug-log-container');
+      if (logContainer) {
+        logContainer.scrollTop = logContainer.scrollHeight;
       }
-    });
-    
-    historyManager.push('drawer');
+    }, 100);
   }
 
   // ========== LOADING INDICATOR ==========
@@ -899,14 +895,7 @@ document.addEventListener("DOMContentLoaded", function () {
         },
         touchStart: function(swiper, event) {
           DebugLog.add('SWIPER', 'Main swiper touchStart', {
-            touches: event.touches?.length,
             activeIndex: swiper.activeIndex
-          });
-        },
-        touchMove: function(swiper, event) {
-          DebugLog.add('SWIPER', 'Main swiper touchMove', {
-            translate: swiper.translate,
-            progress: swiper.progress
           });
         },
         touchEnd: function(swiper, event) {
@@ -1016,14 +1005,7 @@ document.addEventListener("DOMContentLoaded", function () {
         },
         touchStart: function(swiper, event) {
           DebugLog.add('SWIPER', 'Nested swiper touchStart', {
-            id: nestedEl.id,
-            touches: event.touches?.length
-          });
-        },
-        touchMove: function(swiper, event) {
-          DebugLog.add('SWIPER', 'Nested swiper touchMove', {
-            id: nestedEl.id,
-            translate: swiper.translate
+            id: nestedEl.id
           });
         },
         touchEnd: function(swiper, event) {
@@ -1212,7 +1194,8 @@ document.addEventListener("DOMContentLoaded", function () {
     const debugBtn = document.createElement('button');
     debugBtn.className = 'ui-btn ui-debug';
     debugBtn.title = 'Debug Logs';
-    debugBtn.innerHTML = '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 9h6m-6 4h6m-6 4h4"/></svg>';
+    debugBtn.style.display = 'none';
+    debugBtn.innerHTML = '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/><circle cx="12" cy="12" r="3"/></svg>';
 
     const reloadBtn = document.createElement('button');
     reloadBtn.className = 'ui-btn ui-reload';
@@ -1234,7 +1217,7 @@ document.addEventListener("DOMContentLoaded", function () {
     const contentBtn = document.createElement('button');
     contentBtn.className = 'ui-btn ui-post-content';
     contentBtn.title = 'Nội dung bài viết';
-    contentBtn.innerHTML = '<svg width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M4 4h16v16H4z"/><path d="M8 8h8M8 12h6M8 16h4"/></svg>';
+    contentBtn.innerHTML = '<svg width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>';
 
     const toggleBtn = document.createElement('button');
     toggleBtn.className = 'ui-btn ui-toggle-visibility';
@@ -1307,7 +1290,7 @@ document.addEventListener("DOMContentLoaded", function () {
 
     const iconEye = toggleBtn.querySelector('.icon-eye');
     const iconEyeSlash = toggleBtn.querySelector('.icon-eye-slash');
-    const buttons = [reloadBtn, commentBtn, linkBtn, contentBtn];
+    const buttons = [debugBtn, reloadBtn, commentBtn, linkBtn, contentBtn];
 
     function toggleUIHandler(e) {
       e && e.preventDefault && e.preventDefault();
@@ -1398,13 +1381,8 @@ document.addEventListener("DOMContentLoaded", function () {
     DebugLog
   };
   
-  // Add CSS for debug drawer
   const style = document.createElement('style');
   style.textContent = `
-    .debug-drawer .drawer-content {
-      max-width: 600px;
-      margin: 0 auto;
-    }
     .debug-log-container {
       height: 100%;
       overflow-y: auto;
@@ -1466,6 +1444,13 @@ document.addEventListener("DOMContentLoaded", function () {
     }
     .ui-debug {
       background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    }
+    .drawer-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 16px;
+      border-bottom: 1px solid rgba(255,255,255,0.1);
     }
   `;
   document.head.appendChild(style);
