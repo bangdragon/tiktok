@@ -1,14 +1,64 @@
-/* ListView - DEBUG VERSION with alerts */
+/* ListView - Enhanced Debug Version with Logs */
+
+// ========== DEBUG LOG MANAGER ==========
+const DebugLog = {
+  logs: [],
+  maxLogs: 500,
+  
+  add(category, message, data = null) {
+    const timestamp = new Date().toLocaleTimeString('vi-VN', { 
+      hour12: false, 
+      hour: '2-digit', 
+      minute: '2-digit', 
+      second: '2-digit',
+      fractionalSecondDigits: 3
+    });
+    
+    const entry = {
+      timestamp,
+      category,
+      message,
+      data: data ? JSON.parse(JSON.stringify(data)) : null
+    };
+    
+    this.logs.push(entry);
+    
+    if (this.logs.length > this.maxLogs) {
+      this.logs.shift();
+    }
+    
+    console.log(`[${category}] ${message}`, data || '');
+  },
+  
+  getAll() {
+    return this.logs;
+  },
+  
+  clear() {
+    this.logs = [];
+    this.add('SYSTEM', 'Logs cleared');
+  },
+  
+  export() {
+    return this.logs.map(log => {
+      let line = `[${log.timestamp}] [${log.category}] ${log.message}`;
+      if (log.data) {
+        line += '\n  Data: ' + JSON.stringify(log.data, null, 2);
+      }
+      return line;
+    }).join('\n\n');
+  }
+};
 
 document.addEventListener("DOMContentLoaded", function () {
-  alert('✅ DOMContentLoaded fired');
+  DebugLog.add('INIT', 'DOMContentLoaded fired');
   
   if (!document.body.classList.contains("list-view")) {
-    alert('❌ Không phải trang list-view');
+    DebugLog.add('INIT', 'Not list-view page, exiting');
     return;
   }
   
-  alert('✅ Đúng trang list-view');
+  DebugLog.add('INIT', 'List-view page confirmed');
   
   // ===== Ẩn các nút More Posts =====
   const hideSelectors = [".blog-pager", ".blog-pager-older-link", ".load-more", "#blog-pager"];
@@ -22,7 +72,7 @@ document.addEventListener("DOMContentLoaded", function () {
 
   const container = document.querySelector(".list-view .blog-posts.hfeed.container");
   if (!container) {
-    alert('❌ Không tìm thấy container');
+    DebugLog.add('INIT', 'Container not found');
     return;
   }
 
@@ -54,6 +104,7 @@ document.addEventListener("DOMContentLoaded", function () {
   async function loadMore() {
     if (!nextPage || loading) return;
     loading = true;
+    DebugLog.add('LOADMORE', 'Loading more posts', { nextPage });
 
     const tempSkeleton = createSkeleton();
     container.appendChild(tempSkeleton);
@@ -79,8 +130,10 @@ document.addEventListener("DOMContentLoaded", function () {
 
       const newPager = temp.querySelector(".blog-pager-older-link");
       nextPage = newPager ? newPager.href : null;
+      DebugLog.add('LOADMORE', `Loaded ${posts.length} posts`, { hasNextPage: !!nextPage });
 
     } catch (err) {
+      DebugLog.add('ERROR', 'Load more failed', { error: err.message });
       console.error(err);
     }
 
@@ -234,7 +287,12 @@ document.addEventListener("DOMContentLoaded", function () {
   // ========== FETCH POST DATA ==========
   async function fetchPostData(url) {
     const cached = postCache.get(url);
-    if (cached) return cached;
+    if (cached) {
+      DebugLog.add('CACHE', 'Post data from cache', { url });
+      return cached;
+    }
+    
+    DebugLog.add('FETCH', 'Fetching post data', { url });
     
     try {
       const res = await fetch(url);
@@ -284,8 +342,10 @@ document.addEventListener("DOMContentLoaded", function () {
 
       const data = { images, textContent, commentsUrl };
       postCache.set(url, data);
+      DebugLog.add('FETCH', 'Post data fetched successfully', { url, imageCount: images.length });
       return data;
     } catch (e) {
+      DebugLog.add('ERROR', 'Fetch post data failed', { url, error: e.message });
       return { images: [], textContent: '', commentsUrl: null };
     }
   }
@@ -320,14 +380,26 @@ document.addEventListener("DOMContentLoaded", function () {
       if (type === 'gallery') { 
         this.state.gallery = true; 
         history.pushState({ galleryOpen: true }, ''); 
+        DebugLog.add('HISTORY', 'Pushed gallery state');
       } else if (type === 'drawer') { 
         this.state.drawer = type; 
         history.pushState({ drawerOpen: type }, ''); 
+        DebugLog.add('HISTORY', 'Pushed drawer state');
       }
     },
     pop() {
-      if (this.state.drawer) { closeDrawer(); this.state.drawer = null; return true; }
-      if (this.state.gallery) { closeGallery(); this.state.gallery = false; return true; }
+      if (this.state.drawer) { 
+        closeDrawer(); 
+        this.state.drawer = null; 
+        DebugLog.add('HISTORY', 'Popped drawer state');
+        return true; 
+      }
+      if (this.state.gallery) { 
+        closeGallery(); 
+        this.state.gallery = false; 
+        DebugLog.add('HISTORY', 'Popped gallery state');
+        return true; 
+      }
       return false;
     }
   };
@@ -379,6 +451,101 @@ document.addEventListener("DOMContentLoaded", function () {
     if (!currentDrawer) return;
     currentDrawer.classList.remove('active');
     setTimeout(() => { currentDrawer?.remove(); currentDrawer = null; }, 300);
+  }
+
+  // ========== DEBUG DRAWER ==========
+  function createDebugDrawer() {
+    DebugLog.add('DEBUG_UI', 'Opening debug drawer');
+    closeDrawer();
+    
+    const drawer = document.createElement('div');
+    drawer.className = 'custom-drawer debug-drawer';
+    drawer.innerHTML = `
+      <div class="drawer-overlay"></div>
+      <div class="drawer-content drawer-90">
+        <div class="drawer-header">
+          <h3 style="margin:0;font-size:16px;font-weight:600">Debug Logs</h3>
+          <div style="display:flex;gap:8px">
+            <button class="debug-copy-btn" title="Copy logs">📋</button>
+            <button class="debug-clear-btn" title="Clear logs">🗑️</button>
+            <button class="drawer-close">✕</button>
+          </div>
+        </div>
+        <div class="drawer-body" style="padding:0">
+          <div class="debug-log-container"></div>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(drawer);
+    currentDrawer = drawer;
+    
+    const logContainer = drawer.querySelector('.debug-log-container');
+    const logs = DebugLog.getAll();
+    
+    if (logs.length === 0) {
+      logContainer.innerHTML = '<div style="padding:20px;text-align:center;opacity:0.6">No logs yet</div>';
+    } else {
+      logContainer.innerHTML = logs.map(log => {
+        const categoryColor = {
+          'INIT': '#4CAF50',
+          'CLICK': '#2196F3',
+          'GALLERY': '#9C27B0',
+          'SWIPER': '#FF9800',
+          'UI': '#00BCD4',
+          'FETCH': '#FFC107',
+          'CACHE': '#8BC34A',
+          'ERROR': '#F44336',
+          'SYSTEM': '#607D8B'
+        };
+        
+        const color = categoryColor[log.category] || '#999';
+        
+        return `
+          <div class="debug-log-entry">
+            <div class="debug-log-header">
+              <span class="debug-log-time">${log.timestamp}</span>
+              <span class="debug-log-category" style="background:${color}">${log.category}</span>
+            </div>
+            <div class="debug-log-message">${log.message}</div>
+            ${log.data ? `<pre class="debug-log-data">${JSON.stringify(log.data, null, 2)}</pre>` : ''}
+          </div>
+        `;
+      }).join('');
+    }
+    
+    requestAnimationFrame(() => {
+      drawer.classList.add('active');
+      logContainer.scrollTop = logContainer.scrollHeight;
+    });
+    
+    const overlay = drawer.querySelector('.drawer-overlay');
+    const closeBtn = drawer.querySelector('.drawer-close');
+    const copyBtn = drawer.querySelector('.debug-copy-btn');
+    const clearBtn = drawer.querySelector('.debug-clear-btn');
+    
+    overlay.addEventListener('click', closeDrawer);
+    closeBtn.addEventListener('click', closeDrawer);
+    
+    copyBtn.addEventListener('click', () => {
+      const text = DebugLog.export();
+      navigator.clipboard.writeText(text).then(() => {
+        copyBtn.textContent = '✅';
+        setTimeout(() => { copyBtn.textContent = '📋'; }, 1000);
+        DebugLog.add('DEBUG_UI', 'Logs copied to clipboard');
+      }).catch(err => {
+        DebugLog.add('ERROR', 'Failed to copy logs', { error: err.message });
+      });
+    });
+    
+    clearBtn.addEventListener('click', () => {
+      if (confirm('Clear all logs?')) {
+        DebugLog.clear();
+        closeDrawer();
+        DebugLog.add('DEBUG_UI', 'Logs cleared by user');
+      }
+    });
+    
+    historyManager.push('drawer');
   }
 
   // ========== LOADING INDICATOR ==========
@@ -467,6 +634,7 @@ document.addEventListener("DOMContentLoaded", function () {
     `;
     
     document.body.appendChild(galleryContainer);
+    DebugLog.add('GALLERY', 'Gallery container created');
     return galleryContainer;
   }
   
@@ -497,11 +665,16 @@ document.addEventListener("DOMContentLoaded", function () {
       </div>
     `;
     
+    DebugLog.add('GALLERY', 'Empty slide created', { postUrl, nestedId });
     return slide;
   }
   
   function updateNestedSwiperSlides(nestedSwiper, postData) {
     if (!nestedSwiper || !postData) return;
+    
+    DebugLog.add('SWIPER', 'Updating nested swiper slides', { 
+      imageCount: postData.images?.length || 0 
+    });
     
     nestedSwiper.removeAllSlides();
     
@@ -525,8 +698,14 @@ document.addEventListener("DOMContentLoaded", function () {
       }
       
       nestedSwiper.update();
+      
+      DebugLog.add('SWIPER', 'Nested swiper updated', { 
+        slideCount: nestedSwiper.slides.length,
+        loop: shouldLoop
+      });
     } else {
       nestedSwiper.appendSlide('<div class="swiper-slide"><div class="placeholder">Không có ảnh</div></div>');
+      DebugLog.add('SWIPER', 'No images in post');
     }
     
     nestedSwiper.slideTo(0, 0);
@@ -534,10 +713,16 @@ document.addEventListener("DOMContentLoaded", function () {
   
   async function loadPostDataForSlide(article) {
     const postUrl = article.querySelector('a[data-post-url]')?.dataset.postUrl;
-    if (!postUrl) return;
+    if (!postUrl) {
+      DebugLog.add('ERROR', 'loadPostDataForSlide: No postUrl');
+      return;
+    }
     
     const mainWrapper = galleryContainer?.querySelector('.swiper-main .swiper-wrapper');
-    if (!mainWrapper) return;
+    if (!mainWrapper) {
+      DebugLog.add('ERROR', 'loadPostDataForSlide: No mainWrapper');
+      return;
+    }
     
     let slide = mainWrapper.querySelector(`[data-post-url="${postUrl}"]`);
     
@@ -546,11 +731,18 @@ document.addEventListener("DOMContentLoaded", function () {
       if (slide) mainWrapper.appendChild(slide);
     }
     
-    if (slide.dataset.loaded === 'true' || slide.dataset.loading === 'true') {
+    if (slide.dataset.loaded === 'true') {
+      DebugLog.add('SWIPER', 'Slide already loaded', { postUrl });
+      return;
+    }
+    
+    if (slide.dataset.loading === 'true') {
+      DebugLog.add('SWIPER', 'Slide already loading', { postUrl });
       return;
     }
     
     slide.dataset.loading = 'true';
+    DebugLog.add('SWIPER', 'Loading post data for slide', { postUrl });
     
     try {
       const postData = await fetchPostData(postUrl);
@@ -585,9 +777,14 @@ document.addEventListener("DOMContentLoaded", function () {
       
       slide.dataset.loaded = 'true';
       slide.postData = postData;
+      DebugLog.add('SWIPER', 'Post data loaded successfully', { 
+        postUrl, 
+        imageCount: postData.images?.length || 0 
+      });
       
     } catch (err) {
       slide.dataset.loaded = 'error';
+      DebugLog.add('ERROR', 'Failed to load post data', { postUrl, error: err.message });
     } finally {
       slide.dataset.loading = 'false';
     }
@@ -621,11 +818,22 @@ document.addEventListener("DOMContentLoaded", function () {
   
   function updateCurrentSlide(swiperInstance) {
     const activeSlide = swiperInstance.slides[swiperInstance.activeIndex];
-    if (!activeSlide) return;
+    if (!activeSlide) {
+      DebugLog.add('SWIPER', 'updateCurrentSlide: No active slide');
+      return;
+    }
+    
+    DebugLog.add('SWIPER', 'Updating current slide', { 
+      index: swiperInstance.activeIndex,
+      postUrl: activeSlide.dataset.postUrl,
+      loaded: activeSlide.dataset.loaded,
+      loading: activeSlide.dataset.loading
+    });
     
     const postData = activeSlide.postData;
     
     if (!postData || activeSlide.dataset.loaded !== 'true') {
+      DebugLog.add('SWIPER', 'Slide not loaded yet, loading now');
       const postUrl = activeSlide.dataset.postUrl;
       const articles = getArticles().filter(a => !a.classList.contains('skeleton'));
       const article = articles.find(a => 
@@ -639,22 +847,27 @@ document.addEventListener("DOMContentLoaded", function () {
           if (activeSlide.postData) {
             initNestedSwiper(activeSlide, activeSlide.postData);
             addCustomUI(activeSlide.postData.url, activeSlide.postData.article, activeSlide.postData);
+            DebugLog.add('SWIPER', 'Slide loaded and UI added');
           }
         });
       }
       return;
     }
     
+    DebugLog.add('SWIPER', 'Slide already loaded, initializing nested swiper and UI');
     initNestedSwiper(activeSlide, postData);
     addCustomUI(postData.url, postData.article, postData);
   }
   
   function initMainSwiper(container, initialIndex = 0) {
     if (mainSwiper) {
+      DebugLog.add('SWIPER', 'Main swiper already exists, sliding to index', { initialIndex });
       mainSwiper.slideTo(initialIndex, 0);
       updateCurrentSlide(mainSwiper);
       return mainSwiper;
     }
+    
+    DebugLog.add('SWIPER', 'Creating main swiper', { initialIndex });
     
     mainSwiper = new Swiper(container.querySelector('.swiper-main'), {
       direction: 'vertical',
@@ -667,15 +880,39 @@ document.addEventListener("DOMContentLoaded", function () {
       resistanceRatio: 0.5,
       on: {
         init: function() {
+          DebugLog.add('SWIPER', 'Main swiper initialized', { 
+            slideCount: this.slides.length,
+            initialIndex: this.activeIndex
+          });
           updateCurrentSlide(this);
         },
         slideChange: function() {
+          DebugLog.add('SWIPER', 'Main swiper slide changed', { 
+            newIndex: this.activeIndex 
+          });
           updateCurrentSlide(this);
           preloadAdjacentSlides(this.activeIndex, 3);
           
           if (this.activeIndex >= this.slides.length - 2) {
             loadMorePosts(this);
           }
+        },
+        touchStart: function(swiper, event) {
+          DebugLog.add('SWIPER', 'Main swiper touchStart', {
+            touches: event.touches?.length,
+            activeIndex: swiper.activeIndex
+          });
+        },
+        touchMove: function(swiper, event) {
+          DebugLog.add('SWIPER', 'Main swiper touchMove', {
+            translate: swiper.translate,
+            progress: swiper.progress
+          });
+        },
+        touchEnd: function(swiper, event) {
+          DebugLog.add('SWIPER', 'Main swiper touchEnd', {
+            activeIndex: swiper.activeIndex
+          });
         }
       }
     });
@@ -685,19 +922,18 @@ document.addEventListener("DOMContentLoaded", function () {
   
   async function preloadInitialPosts() {
     if (isPreloading) {
-      alert('⚠️ Đang preload rồi');
+      DebugLog.add('SYSTEM', 'Already preloading');
       return;
     }
     isPreloading = true;
     
     const articles = getArticles().filter(a => !a.classList.contains('skeleton'));
-    alert(`📦 Tìm thấy ${articles.length} bài viết`);
+    DebugLog.add('SYSTEM', 'Starting preload', { articleCount: articles.length });
     
     const first10 = articles.slice(0, 10);
-    alert(`🎯 Chọn ${first10.length} bài để preload`);
     
     if (first10.length === 0) {
-      alert('❌ Không có bài viết');
+      DebugLog.add('ERROR', 'No articles to preload');
       isPreloading = false;
       return;
     }
@@ -706,7 +942,7 @@ document.addEventListener("DOMContentLoaded", function () {
     const mainWrapper = container.querySelector('.swiper-main .swiper-wrapper');
     
     if (!mainWrapper) {
-      alert('❌ Không tạo được mainWrapper');
+      DebugLog.add('ERROR', 'No mainWrapper for preload');
       isPreloading = false;
       return;
     }
@@ -716,25 +952,43 @@ document.addEventListener("DOMContentLoaded", function () {
       if (slide) mainWrapper.appendChild(slide);
     });
     
-    alert(`✅ Đã tạo ${mainWrapper.children.length} slides`);
+    DebugLog.add('SYSTEM', 'Slides created for preload', { 
+      slideCount: mainWrapper.children.length 
+    });
     
     const promises = first10.map((article, index) => 
       loadPostDataForSlide(article)
         .then(() => {})
-        .catch(err => {})
+        .catch(err => {
+          DebugLog.add('ERROR', 'Preload failed for article', { index, error: err.message });
+        })
     );
     
     await Promise.allSettled(promises);
-    alert('⚡ Preload hoàn tất!');
+    DebugLog.add('SYSTEM', 'Preload completed');
     
     isPreloading = false;
   }
   
   function initNestedSwiper(slideEl, postData) {
     const nestedEl = slideEl.querySelector('.swiper-nested');
-    if (!nestedEl || nestedSwipers.has(nestedEl.id)) return;
+    if (!nestedEl) {
+      DebugLog.add('ERROR', 'initNestedSwiper: No nested element');
+      return;
+    }
+    
+    if (nestedSwipers.has(nestedEl.id)) {
+      DebugLog.add('SWIPER', 'Nested swiper already exists', { id: nestedEl.id });
+      return;
+    }
 
     const shouldLoop = nestedEl.dataset.shouldLoop === 'true';
+    
+    DebugLog.add('SWIPER', 'Creating nested swiper', { 
+      id: nestedEl.id,
+      shouldLoop,
+      imageCount: postData.images?.length || 0
+    });
 
     const nested = new Swiper(nestedEl, {
       direction: 'horizontal',
@@ -743,13 +997,40 @@ document.addEventListener("DOMContentLoaded", function () {
       on: {
         init: function() {
           const activeIndex = this.realIndex || this.activeIndex;
+          DebugLog.add('SWIPER', 'Nested swiper initialized', { 
+            id: nestedEl.id,
+            activeIndex,
+            slideCount: this.slides.length
+          });
           if (postData.images[activeIndex - 1]) preloadImages([postData.images[activeIndex - 1]]);
           if (postData.images[activeIndex + 1]) preloadImages([postData.images[activeIndex + 1]]);
         },
         slideChange: function() {
           const activeIndex = this.realIndex || this.activeIndex;
+          DebugLog.add('SWIPER', 'Nested swiper slide changed', { 
+            id: nestedEl.id,
+            activeIndex 
+          });
           if (postData.images[activeIndex - 1]) preloadImages([postData.images[activeIndex - 1]]);
           if (postData.images[activeIndex + 1]) preloadImages([postData.images[activeIndex + 1]]);
+        },
+        touchStart: function(swiper, event) {
+          DebugLog.add('SWIPER', 'Nested swiper touchStart', {
+            id: nestedEl.id,
+            touches: event.touches?.length
+          });
+        },
+        touchMove: function(swiper, event) {
+          DebugLog.add('SWIPER', 'Nested swiper touchMove', {
+            id: nestedEl.id,
+            translate: swiper.translate
+          });
+        },
+        touchEnd: function(swiper, event) {
+          DebugLog.add('SWIPER', 'Nested swiper touchEnd', {
+            id: nestedEl.id,
+            activeIndex: swiper.activeIndex
+          });
         }
       }
     });
@@ -780,11 +1061,11 @@ document.addEventListener("DOMContentLoaded", function () {
   }
 
   async function openGallery(article, skipHistory = false) {
-    alert('🎬 openGallery được gọi');
+    DebugLog.add('GALLERY', 'openGallery called');
     
     const postUrl = article.querySelector('a[data-post-url]')?.dataset.postUrl;
     if (!postUrl) {
-      alert('❌ Không có postUrl');
+      DebugLog.add('ERROR', 'openGallery: No postUrl');
       return;
     }
 
@@ -794,24 +1075,32 @@ document.addEventListener("DOMContentLoaded", function () {
     const articles = getArticles().filter(a => !a.classList.contains('skeleton'));
     const currentIndex = articles.indexOf(article);
     
-    alert(`📍 Index: ${currentIndex}, Slides: ${mainWrapper.children.length}`);
+    DebugLog.add('GALLERY', 'Opening gallery', { 
+      postUrl, 
+      currentIndex,
+      totalArticles: articles.length,
+      existingSlides: mainWrapper.children.length
+    });
     
     if (currentIndex === -1) {
-      alert('❌ Không tìm thấy article');
+      DebugLog.add('ERROR', 'Article not found in list');
       return;
     }
     
     let slide = mainWrapper.querySelector(`[data-post-url="${postUrl}"]`);
     const alreadyLoaded = slide && slide.dataset.loaded === 'true';
     
-    alert(`💾 Đã load: ${alreadyLoaded}`);
+    DebugLog.add('GALLERY', 'Slide status', { 
+      slideExists: !!slide,
+      alreadyLoaded 
+    });
     
     if (!alreadyLoaded) {
       showLoading();
     }
     
     if (mainWrapper.children.length === 0) {
-      alert('🔨 Tạo slides cho tất cả bài');
+      DebugLog.add('GALLERY', 'Creating all slides');
       articles.forEach(art => {
         const s = createEmptySlide(art);
         if (s) mainWrapper.appendChild(s);
@@ -822,16 +1111,25 @@ document.addEventListener("DOMContentLoaded", function () {
     const endIdx = Math.min(articles.length, currentIndex + 4);
     const articlesToLoad = articles.slice(startIdx, endIdx);
     
+    DebugLog.add('GALLERY', 'Loading adjacent posts', { 
+      startIdx, 
+      endIdx, 
+      count: articlesToLoad.length 
+    });
+    
     await Promise.allSettled(
       articlesToLoad.map(art => loadPostDataForSlide(art))
     );
     
     hideLoading();
     
+    DebugLog.add('GALLERY', 'Initializing main swiper', { initialIndex: currentIndex });
     initMainSwiper(container, currentIndex);
     
     container.style.display = 'block';
     uiVisible = false;
+    
+    DebugLog.add('GALLERY', 'Gallery opened successfully');
     
     if (!skipHistory) historyManager.push('gallery');
   }
@@ -863,6 +1161,8 @@ document.addEventListener("DOMContentLoaded", function () {
   function closeGallery() {
     if (!galleryContainer) return;
 
+    DebugLog.add('GALLERY', 'Closing gallery');
+
     galleryContainer.style.opacity = '0';
     galleryContainer.style.transition = 'opacity 0.3s ease';
 
@@ -874,9 +1174,13 @@ document.addEventListener("DOMContentLoaded", function () {
       if (mainSwiper) {
         mainSwiper.destroy(true, true);
         mainSwiper = null;
+        DebugLog.add('SWIPER', 'Main swiper destroyed');
       }
       
-      nestedSwipers.forEach(s => s.destroy(true, true));
+      nestedSwipers.forEach((s, id) => {
+        s.destroy(true, true);
+        DebugLog.add('SWIPER', 'Nested swiper destroyed', { id });
+      });
       nestedSwipers.clear();
 
       const wrapper = galleryContainer.querySelector('.swiper-main .swiper-wrapper');
@@ -888,15 +1192,27 @@ document.addEventListener("DOMContentLoaded", function () {
       if (existingUI) existingUI.remove();
       
       isPreloading = false;
+      
+      DebugLog.add('GALLERY', 'Gallery closed');
     }, 300);
   }
 
   function addCustomUI(postUrl, article, postData) {
     const existing = document.querySelector('.gallery-custom-ui');
-    if (existing) existing.remove();
+    if (existing) {
+      DebugLog.add('UI', 'Removing existing UI');
+      existing.remove();
+    }
+
+    DebugLog.add('UI', 'Adding custom UI', { postUrl });
 
     const uiContainer = document.createElement('div');
     uiContainer.className = 'gallery-custom-ui';
+
+    const debugBtn = document.createElement('button');
+    debugBtn.className = 'ui-btn ui-debug';
+    debugBtn.title = 'Debug Logs';
+    debugBtn.innerHTML = '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 9h6m-6 4h6m-6 4h4"/></svg>';
 
     const reloadBtn = document.createElement('button');
     reloadBtn.className = 'ui-btn ui-reload';
@@ -926,6 +1242,7 @@ document.addEventListener("DOMContentLoaded", function () {
     toggleBtn.innerHTML = '<svg class="icon-eye" width="24" style="display:none" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>' +
                            '<svg class="icon-eye-slash" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/><line x1="1" y1="1" x2="23" y2="23"></line></svg>';
 
+    uiContainer.appendChild(debugBtn);
     uiContainer.appendChild(reloadBtn);
     uiContainer.appendChild(commentBtn);
     uiContainer.appendChild(linkBtn);
@@ -935,7 +1252,13 @@ document.addEventListener("DOMContentLoaded", function () {
 
     [reloadBtn, commentBtn, linkBtn, contentBtn].forEach(b => b.style.display = 'none');
 
+    debugBtn.addEventListener('click', () => {
+      DebugLog.add('UI', 'Debug button clicked');
+      createDebugDrawer();
+    });
+
     reloadBtn.addEventListener('click', async () => {
+      DebugLog.add('UI', 'Reload button clicked', { postUrl });
       postCache.cache.delete(postUrl);
       postCache.lastAccess.delete(postUrl);
       
@@ -961,16 +1284,18 @@ document.addEventListener("DOMContentLoaded", function () {
             addCustomUI(activeSlide.postData.url, activeSlide.postData.article, activeSlide.postData);
           }
           
-          alert("Đã tải lại bài viết");
+          DebugLog.add('UI', 'Post reloaded successfully');
         }
       }
     });
 
     commentBtn.addEventListener('click', () => { 
+      DebugLog.add('UI', 'Comment button clicked');
       window.location.href = postUrl + "#comments"; 
     });
 
     contentBtn.addEventListener("click", () => {
+      DebugLog.add('UI', 'Content button clicked');
       let html = postData?.textContent?.trim() || "";
       const tmp = document.createElement("div");
       tmp.innerHTML = html;
@@ -988,6 +1313,7 @@ document.addEventListener("DOMContentLoaded", function () {
       e && e.preventDefault && e.preventDefault();
       e && e.stopPropagation && e.stopPropagation();
       uiVisible = !uiVisible;
+      DebugLog.add('UI', 'UI visibility toggled', { uiVisible });
       if (uiVisible) {
         iconEye.style.display = 'block';
         iconEyeSlash.style.display = 'none';
@@ -1002,6 +1328,8 @@ document.addEventListener("DOMContentLoaded", function () {
 
     toggleBtn.addEventListener('mousedown', toggleUIHandler, true);
     toggleBtn.addEventListener('touchstart', toggleUIHandler, true);
+    
+    DebugLog.add('UI', 'Custom UI added successfully');
   }
 
   function attachArticleEvents() {
@@ -1016,6 +1344,9 @@ document.addEventListener("DOMContentLoaded", function () {
           e.preventDefault();
           e.stopPropagation();
           e.stopImmediatePropagation();
+          DebugLog.add('CLICK', 'Article clicked', { 
+            postUrl: link.dataset.postUrl 
+          });
           openGallery(article);
           return false;
         }, true);
@@ -1026,12 +1357,12 @@ document.addEventListener("DOMContentLoaded", function () {
   }
   
   setTimeout(() => {
-    alert('⏰ Bắt đầu setup sau 500ms...');
+    DebugLog.add('INIT', 'Starting setup after 500ms delay');
     attachArticleEvents();
     setupPreloadObserver();
     
     setTimeout(() => {
-      alert('⏰ Gọi preloadInitialPosts sau 1s...');
+      DebugLog.add('INIT', 'Calling preloadInitialPosts');
       preloadInitialPosts();
     }, 1000);
   }, 500);
@@ -1063,6 +1394,79 @@ document.addEventListener("DOMContentLoaded", function () {
     fetchPostData, 
     postCache,
     getMainSwiper: () => mainSwiper,
-    getNestedSwipers: () => nestedSwipers
+    getNestedSwipers: () => nestedSwipers,
+    DebugLog
   };
+  
+  // Add CSS for debug drawer
+  const style = document.createElement('style');
+  style.textContent = `
+    .debug-drawer .drawer-content {
+      max-width: 600px;
+      margin: 0 auto;
+    }
+    .debug-log-container {
+      height: 100%;
+      overflow-y: auto;
+      padding: 12px;
+      background: #1a1a1a;
+      font-family: 'Courier New', monospace;
+      font-size: 12px;
+    }
+    .debug-log-entry {
+      margin-bottom: 12px;
+      padding: 10px;
+      background: #2a2a2a;
+      border-radius: 6px;
+      border-left: 3px solid #666;
+    }
+    .debug-log-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 6px;
+    }
+    .debug-log-time {
+      color: #888;
+      font-size: 11px;
+    }
+    .debug-log-category {
+      padding: 2px 8px;
+      border-radius: 4px;
+      color: white;
+      font-weight: 600;
+      font-size: 10px;
+      text-transform: uppercase;
+    }
+    .debug-log-message {
+      color: #fff;
+      margin-bottom: 6px;
+      word-wrap: break-word;
+    }
+    .debug-log-data {
+      background: #1a1a1a;
+      padding: 8px;
+      border-radius: 4px;
+      color: #4CAF50;
+      overflow-x: auto;
+      font-size: 11px;
+      margin: 0;
+    }
+    .debug-copy-btn, .debug-clear-btn {
+      background: #333;
+      border: none;
+      color: white;
+      padding: 8px 12px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 16px;
+    }
+    .debug-copy-btn:hover, .debug-clear-btn:hover {
+      background: #444;
+    }
+    .ui-debug {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    }
+  `;
+  document.head.appendChild(style);
 });
