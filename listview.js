@@ -1,108 +1,101 @@
-
-
-
-
-document.addEventListener("DOMContentLoaded", function () {
-    if (!document.body.classList.contains("list-view")) return;
-
-    // ===== Ẩn các nút More Posts =====
-    const hideSelectors = [
-        ".blog-pager",
-        ".blog-pager-older-link",
-        ".load-more",
-        "#blog-pager"
-    ];
-    hideSelectors.forEach(sel => {
-        document.querySelectorAll(sel).forEach(el => {
-            el.style.display = "none";
-            el.style.opacity = "0";
-            el.style.visibility = "hidden";
-        });
-    });
-    // ==================================
-
-    const container = document.querySelector(".list-view .blog-posts.hfeed.container");
-    if (!container) return;
-
-    let nextPage = null;
-    let loading = false;
-
-    function getNextPage() {
-        const pager = document.querySelector(".blog-pager-older-link");
-        if (pager) nextPage = pager.href;
-    }
-    getNextPage();
-
-    function createSkeleton() {
-        const article = document.createElement("article");
-        article.className = "post-outer-container skeleton";
-        article.innerHTML = `
-            <div class="post-outer">
-                <div class="post">
-                        <div class="thumb-image">
-                            <div class="skeleton-box"></div>
-                        </div>
-                    <div class="thumb-title"><span class="thumb-title-inner"></span></div>
-                </div>
-            </div>
-        `;
-        return article;
-    }
-
-    async function loadMore() {
-        if (!nextPage || loading) return;
-        loading = true;
-
-        // append 1 skeleton tạm thời ngay lập tức để người dùng thấy
-        const tempSkeleton = createSkeleton();
-        container.appendChild(tempSkeleton);
-
-        try {
-            const res = await fetch(nextPage);
-            const html = await res.text();
-            const temp = document.createElement("div");
-            temp.innerHTML = html;
-
-            // lấy tất cả bài mới
-            const posts = temp.querySelectorAll(".post-outer-container");
-
-            // Nếu có nhiều hơn 1 bài → thêm skeleton tương ứng
-            const skeletons = [tempSkeleton];
-            for (let i = 1; i < posts.length; i++) {
-                const sk = createSkeleton();
-                container.appendChild(sk);
-                skeletons.push(sk);
-            }
-
-            // Replace skeleton bằng bài thật
-            posts.forEach((post, i) => {
-                if (skeletons[i]) skeletons[i].replaceWith(post);
-                else container.appendChild(post);
-            });
-
-            // cập nhật next page
-            const newPager = temp.querySelector(".blog-pager-older-link");
-            nextPage = newPager ? newPager.href : null;
-
-        } catch (err) {
-            console.error(err);
-        }
-
-        loading = false;
-    }
-
-    window.addEventListener("scroll", function () {
-        if (!nextPage || loading) return;
-        const reachBottom = window.innerHeight + window.scrollY >= document.body.offsetHeight - 500;
-        if (reachBottom) loadMore();
-    });
-
-});
+/* ListView */
 
 document.addEventListener("DOMContentLoaded", function () {
   if (!document.body.classList.contains("list-view")) return;
+  
+      // ===== Ẩn các nút More Posts =====
+    const hideSelectors = [
+        ".blog-pager",
+        ".blog-pager-older-link",
+        ".load-more",
+        "#blog-pager"
+    ];
+    hideSelectors.forEach(sel => {
+        document.querySelectorAll(sel).forEach(el => {
+            el.style.display = "none";
+            el.style.opacity = "0";
+            el.style.visibility = "hidden";
+        });
+    });
+    // ==================================
 
-  // ========== CACHE MANAGER ==========
+    const container = document.querySelector(".list-view .blog-posts.hfeed.container");
+    if (!container) return;
+
+    let nextPage = null;
+    let loading = false;
+
+    function getNextPage() {
+        const pager = document.querySelector(".blog-pager-older-link");
+        if (pager) nextPage = pager.href;
+    }
+    getNextPage();
+
+    function createSkeleton() {
+        const article = document.createElement("article");
+        article.className = "post-outer-container skeleton";
+        article.innerHTML = `
+            <div class="post-outer">
+                <div class="post">
+                        <div class="thumb-image">
+                            <div class="skeleton-box"></div>
+                        </div>
+                    <div class="thumb-title"><span class="thumb-title-inner"></span></div>
+                </div>
+            </div>
+        `;
+        return article;
+    }
+
+    async function loadMore() {
+        if (!nextPage || loading) return;
+        loading = true;
+
+        // append 1 skeleton tạm thời ngay lập tức để người dùng thấy
+        const tempSkeleton = createSkeleton();
+        container.appendChild(tempSkeleton);
+
+        try {
+            const res = await fetch(nextPage);
+            const html = await res.text();
+            const temp = document.createElement("div");
+            temp.innerHTML = html;
+
+            // lấy tất cả bài mới
+            const posts = temp.querySelectorAll(".post-outer-container");
+
+            // Nếu có nhiều hơn 1 bài → thêm skeleton tương ứng
+            const skeletons = [tempSkeleton];
+            for (let i = 1; i < posts.length; i++) {
+                const sk = createSkeleton();
+                container.appendChild(sk);
+                skeletons.push(sk);
+            }
+
+            // Replace skeleton bằng bài thật
+            posts.forEach((post, i) => {
+                if (skeletons[i]) skeletons[i].replaceWith(post);
+                else container.appendChild(post);
+            });
+
+            // cập nhật next page
+            const newPager = temp.querySelector(".blog-pager-older-link");
+            nextPage = newPager ? newPager.href : null;
+
+        } catch (err) {
+            console.error(err);
+        }
+
+        loading = false;
+    }
+
+    window.addEventListener("scroll", function () {
+        if (!nextPage || loading) return;
+        const reachBottom = window.innerHeight + window.scrollY >= document.body.offsetHeight - 500;
+        if (reachBottom) loadMore();
+    });
+
+    // ========== CACHE MANAGER ==========
   const CACHE_VERSION = 'v3';
   const imageCache = new Map();
   const imageLoadStatus = new Map(); // Track image loading status
