@@ -38,9 +38,35 @@ jobs:
 
           echo "new=$new" >> $GITHUB_OUTPUT
 
+      # ===========================
+      #       MINIFY SECTION
+      # ===========================
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install Terser
+        run: npm install terser -g
+
+      - name: Minify listview.js
+        run: |
+          if [ -f "listview.js" ]; then
+            terser listview.js -o listview.min.js -c -m
+          else
+            echo "❌ ERROR: File listview.js không tồn tại!"
+            exit 1
+          fi
+
+      # ===========================
+
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.bump.outputs.new }}
           name: Release ${{ steps.bump.outputs.new }}
           generate_release_notes: true
+          files: |
+            listview.js
+            listview.min.js
