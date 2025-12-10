@@ -905,6 +905,23 @@ document.addEventListener("DOMContentLoaded", function () {
         }
       }
     });
+    // FIX: đảm bảo mainSwiper đã update và gọi updateCurrentSlide cho initialIndex
+setTimeout(() => {
+    try {
+        mainSwiper.update();
+        mainSwiper.updateSlides();
+        mainSwiper.slideTo(initialIndex, 0); // đảm bảo active slide đúng
+        // gọi updateCurrentSlide để init nested swiper + UI cho slide hiện tại ngay lập tức
+        if (typeof updateCurrentSlide === 'function') {
+            updateCurrentSlide(initialIndex);
+        } else {
+            DebugLog && DebugLog.add && DebugLog.add('WARN', 'updateCurrentSlide not found when forcing init for initialIndex', { initialIndex });
+        }
+    } catch (e) {
+        console.error('mainSwiper post-init error', e);
+    }
+}, 50);
+
     
     return mainSwiper;
   }
@@ -982,6 +999,8 @@ document.addEventListener("DOMContentLoaded", function () {
     const nested = new Swiper(nestedEl, {
       direction: 'horizontal',
       loop: shouldLoop,
+      observer: true,
+      observeParents: true,
       loopAdditionalSlides: shouldLoop ? 2 : 0,
       on: {
         init: function() {
@@ -1016,6 +1035,24 @@ document.addEventListener("DOMContentLoaded", function () {
         }
       }
     });
+    
+    // FIX: thêm options cho observer & đảm bảo nested hoàn toàn init
+// nếu chưa có, thêm observer vào config phía trên cũng được.
+// Sau khi tạo, cập nhật và bật touch ngay để nested nhận swipe ngang.
+try {
+    // đảm bảo observer nếu cần: (nếu config chưa có observer/observeParents, thêm vào bên trên)
+    nested.update && nested.update();
+    nested.updateSlides && nested.updateSlides();
+    // đặt lại slide index inner về 0 để tránh trạng thái lạ
+    if (nested.slideTo) nested.slideTo(0, 0);
+    // bật cho phép touch (trường hợp trước đó bị tắt)
+    nested.allowTouchMove = true;
+    // log debug
+    DebugLog && DebugLog.add && DebugLog.add('SWIPER', 'Nested post-init update/allowTouchMove', { id: nestedEl.id || nestedEl });
+} catch (e) {
+    console.error('nested swiper post-init error', e);
+}
+
 
     nestedSwipers.set(nestedEl.id, nested);
   }
@@ -1195,7 +1232,7 @@ document.addEventListener("DOMContentLoaded", function () {
     debugBtn.className = 'ui-btn ui-debug';
     debugBtn.title = 'Debug Logs';
     debugBtn.style.display = 'none';
-    debugBtn.innerHTML = '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/><circle cx="12" cy="12" r="3"/></svg>';
+    debugBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-bug-icon lucide-bug"><path d="M12 20v-9"/><path d="M14 7a4 4 0 0 1 4 4v3a6 6 0 0 1-12 0v-3a4 4 0 0 1 4-4z"/><path d="M14.12 3.88 16 2"/><path d="M21 21a4 4 0 0 0-3.81-4"/><path d="M21 5a4 4 0 0 1-3.55 3.97"/><path d="M22 13h-4"/><path d="M3 21a4 4 0 0 1 3.81-4"/><path d="M3 5a4 4 0 0 0 3.55 3.97"/><path d="M6 13H2"/><path d="m8 2 1.88 1.88"/><path d="M9 7.13V6a3 3 0 1 1 6 0v1.13"/></svg>';
 
     const reloadBtn = document.createElement('button');
     reloadBtn.className = 'ui-btn ui-reload';
@@ -1217,7 +1254,7 @@ document.addEventListener("DOMContentLoaded", function () {
     const contentBtn = document.createElement('button');
     contentBtn.className = 'ui-btn ui-post-content';
     contentBtn.title = 'Nội dung bài viết';
-    contentBtn.innerHTML = '<svg width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>';
+    contentBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-file-text-icon lucide-file-text"><path d="M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z"/><path d="M14 2v5a1 1 0 0 0 1 1h5"/><path d="M10 9H8"/><path d="M16 13H8"/><path d="M16 17H8"/></svg>';
 
     const toggleBtn = document.createElement('button');
     toggleBtn.className = 'ui-btn ui-toggle-visibility';
