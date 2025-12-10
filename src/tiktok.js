@@ -251,7 +251,7 @@ document.addEventListener("DOMContentLoaded", function () {
   const imageLoadStatus = new Map();
 
   const postCache = {
-    maxSize: 30,
+    maxSize: 20,
     cache: new Map(),
     lastAccess: new Map(),
     

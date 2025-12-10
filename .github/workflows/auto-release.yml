@@ -1,9 +1,8 @@
-name: Auto Release
+name: Auto Release from src
 
 on:
   push:
-    branches:
-      - main   # đổi nếu bạn dùng branch khác
+    branches: [ main ]
 
 permissions:
   contents: write
@@ -13,9 +12,12 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout
+      - name: Checkout repo
         uses: actions/checkout@v4
 
+      # ===========================
+      #   GET LAST TAG + BUMP PATCH
+      # ===========================
       - name: Get last tag
         id: lasttag
         run: |
@@ -23,50 +25,61 @@ jobs:
           tag=$(git describe --tags --abbrev=0 2>/dev/null || echo "v1.0.0")
           echo "tag=$tag" >> $GITHUB_OUTPUT
 
-      - name: Auto increment version (patch)
+      - name: Bump patch version
         id: bump
         run: |
           old=${{ steps.lasttag.outputs.tag }}
           base=${old#v}
-
           major=$(echo $base | cut -d. -f1)
           minor=$(echo $base | cut -d. -f2)
           patch=$(echo $base | cut -d. -f3)
-
           patch=$((patch + 1))
           new="v$major.$minor.$patch"
-
           echo "new=$new" >> $GITHUB_OUTPUT
 
       # ===========================
-      #       MINIFY SECTION
+      #     SETUP NODE & MINIFIER
       # ===========================
-
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: 20
 
-      - name: Install Terser
-        run: npm install terser -g
-
-      - name: Minify listview.js
+      - name: Install Minifiers
         run: |
-          if [ -f "listview.js" ]; then
-            terser listview.js -o listview.min.js -c -m
-          else
-            echo "❌ ERROR: File listview.js không tồn tại!"
-            exit 1
-          fi
+          npm install -g terser clean-css-cli
 
       # ===========================
+      #     MINIFY FILES IN /src
+      # ===========================
+      - name: Minify JS & CSS in src
+        run: |
+          mkdir -p dist
 
+          # Copy all original files from /src
+          find src -type f \( -name "*.js" -o -name "*.css" \) | while read file; do
+            cp "$file" dist/
+          done
+
+          # Minify JS
+          find src -type f -name "*.js" ! -name "*.min.js" | while read file; do
+            base=$(basename "$file" .js)
+            terser "$file" -o "dist/${base}.min.js" -c -m
+          done
+
+          # Minify CSS
+          find src -type f -name "*.css" ! -name "*.min.css" | while read file; do
+            base=$(basename "$file" .css)
+            cleancss -o "dist/${base}.min.css" "$file"
+          done
+
+      # ===========================
+      #          CREATE RELEASE
+      # ===========================
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.bump.outputs.new }}
           name: Release ${{ steps.bump.outputs.new }}
           generate_release_notes: true
-          files: |
-            listview.js
-            listview.min.js
+          files: dist/*
