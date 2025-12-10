@@ -1,0 +1,46 @@
+name: Auto Release
+
+on:
+  push:
+    branches:
+      - main   # đổi nếu bạn dùng branch khác
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Get last tag
+        id: lasttag
+        run: |
+          git fetch --tags
+          tag=$(git describe --tags --abbrev=0 2>/dev/null || echo "v1.0.0")
+          echo "tag=$tag" >> $GITHUB_OUTPUT
+
+      - name: Auto increment version (patch)
+        id: bump
+        run: |
+          old=${{ steps.lasttag.outputs.tag }}
+          base=${old#v}
+
+          major=$(echo $base | cut -d. -f1)
+          minor=$(echo $base | cut -d. -f2)
+          patch=$(echo $base | cut -d. -f3)
+
+          patch=$((patch + 1))
+          new="v$major.$minor.$patch"
+
+          echo "new=$new" >> $GITHUB_OUTPUT
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.bump.outputs.new }}
+          name: Release ${{ steps.bump.outputs.new }}
+          generate_release_notes: true
