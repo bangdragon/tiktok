@@ -1,0 +1,77 @@
+<html>
+<head>
+
+    <!-- Thêm Swiper CSS -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/swiper@12.0.3/swiper-bundle.min.css" />
+<link rel="stylesheet" href="https://github.com/bangdragon/tiktok/releases/latest/download/tiktok.min.css" />
+
+
+<!-- Thêm Swiper JS -->
+<script src="https://cdn.jsdelivr.net/npm/swiper@12.0.3/swiper-bundle.min.js"></script>
+
+<script src="https://github.com/bangdragon/tiktok/releases/latest/download/tiktok.min.js"></script> 
+
+</head>
+
+<b:includable id='post' var='post'>
+  <!-- LIST (HOME / LABEL) -->
+  <b:if cond='data:view.isMultipleItems'>
+     <!-- Keep anchor for no-JS fallback. Add data-post-url for JS -->
+     <a class="post-click-area"
+        expr:href='data:post.url'
+        expr:data-post-url='data:post.url'>
+
+       <!-- thumbnail -->
+       <b:if cond='data:post.featuredImage'>
+         <div class='thumb-image'>
+           <b:with value='data:post.featuredImage' var='img'>
+             <b:include
+               data='{
+                 image: data:img,
+                 imageSizes: [200, 320, 540, 640, 800],
+                 sourceSizes: "(max-width: 767px) 50vw, (max-width: 1024px) 33.33vw, 25vw"
+               }'
+               name='responsiveImage'/>
+           </b:with>
+         </div>
+       <b:else/>
+         <div class='thumb-image thumb-no-image'>
+           <span class='no-image-text'>Không có ảnh</span>
+         </div>
+       </b:if>
+
+       <!-- title -->
+       <span class='thumb-title'><data:post.title/></span>
+
+     </a>
+
+     <!-- Hidden snippet (optional) -->
+     <div class="post-snippet" style="display:none">
+       <b:eval expr='snippet(data:post.body, {length: 240, ellipsis: false})'/>
+     </div>
+
+     <!-- Hidden labels -->
+     <div class="post-labels" style="display:none">
+       <b:loop values='data:post.labels' var='lab'>
+         <data:lab.name/><b:if cond='data:lab != data:post.labels.last'>, </b:if>
+       </b:loop>
+     </div>
+  <b:else/>
+    <!-- SINGLE POST (normal rendering) -->
+    <div class='post'>
+      <b:include data='post' name='postMeta'/>
+      <b:include data='post' name='postTitle'/>
+      <b:include name='headerByline'/>
+      <b:if cond='data:view.isSingleItem'>
+        <b:include data='post' name='postBody'/>
+      <b:else/>
+        <b:include data='post' name='postBodySnippet'/>
+        <b:include data='post' name='postJumpLink'/>
+      </b:if>
+      <b:include data='post' name='postFooter'/>
+    </div>
+  </b:if>
+</b:includable>
+
+
+</html>
