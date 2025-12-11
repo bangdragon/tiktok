@@ -641,25 +641,36 @@ document.addEventListener("DOMContentLoaded", function () {
     }, 100);
   }
 
-  // ========== LOADING INDICATOR ==========
-  function showLoading() {
-    if (document.getElementById('gallery-loading')) return;
+// ========== LOADING INDICATOR ==========
+function showLoading(message = 'Đang tải...') {
+    const existing = document.getElementById('gallery-loading');
+    if (existing) {
+        // Cập nhật message nếu loading đã hiện
+        const messageEl = existing.querySelector('.loading-message');
+        if (messageEl) messageEl.textContent = message;
+        return;
+    }
+    
     const loading = document.createElement('div');
     loading.id = 'gallery-loading';
     loading.innerHTML = `
-      <div class="loading-overlay"></div>
       <div class="loading-spinner">
         <div class="spinner"></div>
-        <p>Đang tải...</p>
+        <p class="loading-message">${message}</p>
       </div>
     `;
     document.body.appendChild(loading);
-  }
-  
-  function hideLoading() { 
+    
+    DebugLog.add('UI', 'Loading shown', { message });
+}
+
+function hideLoading() { 
     const loading = document.getElementById('gallery-loading'); 
-    if (loading) loading.remove(); 
-  }
+    if (loading) {
+        loading.remove();
+        DebugLog.add('UI', 'Loading hidden');
+    }
+}
 
   // ========== IMAGE LOADING PLACEHOLDER ==========
   function createImageWithLoader(imgUrl, idx) {
@@ -1187,8 +1198,8 @@ document.addEventListener("DOMContentLoaded", function () {
     const start = Math.max(0, currentIndex - 3);
     const end = Math.min(articles.length, currentIndex + 4);
     const neighbors = articles.slice(start, end);
-
-    showLoading();
+    
+    showLoading('Đang tải bài viết...');
 
     await Promise.allSettled(neighbors.map(loadPostDataForSlide));
 
@@ -1293,7 +1304,7 @@ document.addEventListener("DOMContentLoaded", function () {
   async function reloadPostData(article, postUrl, activeSlide) {
     try {
         DebugLog.add('UI', 'Reload button clicked', { postUrl });
-        showLoading('Đang tải lại...');
+        showLoading('Đang cập nhật bài viết...');
         await new Promise(requestAnimationFrame);
 
         // --- xóa cache CŨ ---
@@ -1726,4 +1737,5 @@ function addCustomUI(postUrl, article, postData) {
     }
   `;
   document.head.appendChild(style);
-});	
+});
+  
