@@ -1293,13 +1293,14 @@ document.addEventListener("DOMContentLoaded", function () {
   async function reloadPostData(article, postUrl, activeSlide) {
     try {
         DebugLog.add('UI', 'Reload button clicked', { postUrl });
-        showLoading();
+        showLoading('Đang tải lại...');
         await new Promise(requestAnimationFrame);
 
-        // --- xóa cache ---
+        // --- xóa cache CŨ ---
         postCache.cache.delete(postUrl);
         postCache.lastAccess.delete(postUrl);
         try { localStorage.removeItem(CACHE_PREFIX + postUrl); } catch(e) {}
+        DebugLog.add('CACHE', 'Old cache cleared', { postUrl });
 
         // --- reset slide để reload ---
         if (activeSlide) {
@@ -1327,12 +1328,72 @@ document.addEventListener("DOMContentLoaded", function () {
             }
         }
 
-        // --- fetch dữ liệu mới ---
-        let freshData = await fetchPostData(postUrl + '?_=' + Date.now());
-        if (!freshData) throw new Error('Không lấy được dữ liệu mới từ server');
+        // --- fetch dữ liệu mới với cache busting ---
+        const cacheBustUrl = postUrl + '?_=' + Date.now();
+        DebugLog.add('FETCH', 'Fetching fresh data', { cacheBustUrl });
+        
+        const res = await fetch(cacheBustUrl);
+        const html = await res.text();
+        const parser = new DOMParser();
+        const doc = parser.parseFromString(html, 'text/html');
 
-        // gán postData mới
-        if (activeSlide) activeSlide.postData = freshData;
+        // Parse images
+        const images = [];
+        const separators = doc.querySelectorAll('.separator a[href]');
+        separators.forEach(link => {
+            let imgUrl = link.href;
+            if (imgUrl && !imgUrl.includes('blogger.googleusercontent.com/tracker')) {
+                images.push(imgUrl);
+            }
+        });
+
+        // Parse text content
+        const postBody = doc.querySelector('.post-body');
+        let textContent = '';
+        if (postBody) {
+            const clone = postBody.cloneNode(true);
+            clone.querySelectorAll('img, .separator').forEach(el => el.remove());
+            textContent = clone.innerHTML;
+        }
+
+        // Parse comments URL
+        let commentsUrl = null;
+        const commentsFrame = doc.querySelector('iframe[src*="blogger.com/comment"]');
+        if (commentsFrame) commentsUrl = commentsFrame.src;
+
+        if (!commentsUrl) {
+            const scripts = doc.querySelectorAll('script');
+            scripts.forEach(script => {
+                const content = script.textContent;
+                if (content && content.includes('commentIframeUrl')) {
+                    const match = content.match(/commentIframeUrl["'\s:]+([^"']+)/);
+                    if (match) commentsUrl = match[1];
+                }
+            });
+        }
+
+        if (!commentsUrl) {
+            const blogIdMatch = html.match(/blogId[=:"'\s]+(\d+)/);
+            const postIdMatch = html.match(/postId[=:"'\s]+(\d+)/);
+            if (blogIdMatch && postIdMatch) {
+                commentsUrl = `https://www.blogger.com/comment-iframe.g?blogID=${blogIdMatch[1]}&postID=${postIdMatch[1]}`;
+            }
+        }
+
+        // 🔧 TẠO object freshData
+        const freshData = { images, textContent, commentsUrl };
+        
+        // 🔧 LƯU VÀO CACHE với key URL GỐC (không có timestamp)
+        postCache.set(postUrl, freshData);
+        DebugLog.add('CACHE', 'Fresh data saved to cache', { 
+            postUrl, 
+            imageCount: images.length 
+        });
+
+        // --- gán postData mới cho slide ---
+        if (activeSlide) {
+            activeSlide.postData = freshData;
+        }
 
         // --- init nested swiper với element MỚI ---
         if (activeSlide) {
@@ -1351,6 +1412,9 @@ document.addEventListener("DOMContentLoaded", function () {
                         imgSlide.innerHTML = createImageWithLoader(imgUrl, idx);
                         nestedWrapper.appendChild(imgSlide);
                     });
+                    
+                    // Preload first image
+                    preloadImages([freshData.images[0]]);
                 }
                 
                 // Init nested swiper mới
@@ -1359,7 +1423,7 @@ document.addEventListener("DOMContentLoaded", function () {
             }
         }
 
-        // 🔧 SỬA LỖI: XÓA UI CŨ trước khi tạo UI mới
+        // 🔧 XÓA UI CŨ trước khi tạo UI mới
         const existingUI = document.querySelector('.gallery-custom-ui');
         if (existingUI) {
             existingUI.remove();
@@ -1371,15 +1435,30 @@ document.addEventListener("DOMContentLoaded", function () {
             addCustomUI(postUrl, article, freshData);
         }
 
+        // 🔧 Đánh dấu slide đã loaded
+        if (activeSlide) {
+            activeSlide.dataset.loaded = 'true';
+            activeSlide.dataset.loading = 'false';
+        }
+
         hideLoading();
-        activeSlide.dataset.loaded = 'true';
         alert('Cập nhật bài viết thành công!');
-        DebugLog.add('UI', 'Post reloaded successfully', { postUrl });
+        DebugLog.add('UI', 'Post reloaded successfully', { 
+            postUrl,
+            cached: true,
+            imageCount: freshData.images.length 
+        });
 
     } catch (e) {
         hideLoading();
-        DebugLog.add('ERROR', 'Reload post failed', { error: e.message });
+        DebugLog.add('ERROR', 'Reload post failed', { error: e.message, stack: e.stack });
         alert('Không thể tải dữ liệu mới — xem console để biết chi tiết.');
+        
+        // Reset slide state on error
+        if (activeSlide) {
+            activeSlide.dataset.loaded = 'false';
+            activeSlide.dataset.loading = 'false';
+        }
     }
 }
 
@@ -1647,5 +1726,4 @@ function addCustomUI(postUrl, article, postData) {
     }
   `;
   document.head.appendChild(style);
-});
-  
+});	
