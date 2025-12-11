@@ -1443,7 +1443,7 @@ function addCustomUI(postUrl, article, postData) {
 
     const iconEye = toggleBtn.querySelector('.icon-eye');
     const iconEyeSlash = toggleBtn.querySelector('.icon-eye-slash');
-    const buttons = [/*debugBtn, */  reloadBtn, commentBtn, linkBtn, contentBtn];
+    const buttons = [debugBtn, reloadBtn, commentBtn, linkBtn, contentBtn];
 
     // 🔧 SỬA LỖI: Khôi phục trạng thái UI cũ
     if (wasVisible) {
@@ -1648,3 +1648,4 @@ function addCustomUI(postUrl, article, postData) {
   `;
   document.head.appendChild(style);
 });
+  
