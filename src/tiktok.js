@@ -98,13 +98,11 @@ document.addEventListener("DOMContentLoaded", function () {
 /* ListView - Enhanced Debug Version with Logs */
 
 // ========== DEBUG LOG MANAGER ==========
-let debug = false;
 const DebugLog = {
   logs: [],
-  maxLogs: 500,
+  maxLogs: 50,
   
   add(category, message, data = null) {
-    if(!debug) return;
     const timestamp = new Date().toLocaleTimeString('vi-VN', { 
       hour12: false, 
       hour: '2-digit', 
@@ -754,7 +752,7 @@ document.addEventListener("DOMContentLoaded", function () {
       <div class="swiper swiper-nested" id="${nestedId}" data-should-loop="false">
         <div class="swiper-wrapper">
           <div class="swiper-slide">
-            <div class="placeholder">Đang tải...</div>
+            <div class="placeholder">Đang tải slide...</div>
           </div>
         </div>
       </div>
@@ -1291,10 +1289,108 @@ document.addEventListener("DOMContentLoaded", function () {
     }, 300);
   }
 
-  function addCustomUI(postUrl, article, postData) {
+  
+  async function reloadPostData(article, postUrl, activeSlide) {
+    try {
+        DebugLog.add('UI', 'Reload button clicked', { postUrl });
+        showLoading();
+        await new Promise(requestAnimationFrame);
+
+        // --- xóa cache ---
+        postCache.cache.delete(postUrl);
+        postCache.lastAccess.delete(postUrl);
+        try { localStorage.removeItem(CACHE_PREFIX + postUrl); } catch(e) {}
+
+        // --- reset slide để reload ---
+        if (activeSlide) {
+            activeSlide.dataset.loaded = 'false';
+            activeSlide.dataset.loading = 'false';
+            activeSlide.postData = null;
+
+            // 🔧 SỬA LỖI: Destroy swiper CŨ và tạo lại nested element MỚI
+            const nestedEl = activeSlide.querySelector('.swiper-nested');
+            if (nestedEl && nestedSwipers.has(nestedEl.id)) {
+                const oldId = nestedEl.id;
+                nestedSwipers.get(oldId).destroy(true, true);
+                nestedSwipers.delete(oldId);
+                
+                // Tạo nested element hoàn toàn mới với ID mới
+                const newNestedId = `nested-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+                nestedEl.id = newNestedId;
+                nestedEl.dataset.shouldLoop = 'false';
+                
+                // Reset HTML của nested container
+                const nestedWrapper = nestedEl.querySelector('.swiper-wrapper');
+                if (nestedWrapper) {
+                    nestedWrapper.innerHTML = '<div class="swiper-slide"><div class="placeholder">Đang tải...</div></div>';
+                }
+            }
+        }
+
+        // --- fetch dữ liệu mới ---
+        let freshData = await fetchPostData(postUrl + '?_=' + Date.now());
+        if (!freshData) throw new Error('Không lấy được dữ liệu mới từ server');
+
+        // gán postData mới
+        if (activeSlide) activeSlide.postData = freshData;
+
+        // --- init nested swiper với element MỚI ---
+        if (activeSlide) {
+            const nestedEl = activeSlide.querySelector('.swiper-nested');
+            if (nestedEl instanceof HTMLElement) {
+                // Update shouldLoop dựa trên số lượng ảnh mới
+                nestedEl.dataset.shouldLoop = freshData.images && freshData.images.length > 1 ? 'true' : 'false';
+                
+                // Cập nhật slides với ảnh mới
+                const nestedWrapper = nestedEl.querySelector('.swiper-wrapper');
+                if (nestedWrapper && freshData.images && freshData.images.length > 0) {
+                    nestedWrapper.innerHTML = '';
+                    freshData.images.forEach((imgUrl, idx) => {
+                        const imgSlide = document.createElement('div');
+                        imgSlide.className = 'swiper-slide swiper-slide-image';
+                        imgSlide.innerHTML = createImageWithLoader(imgUrl, idx);
+                        nestedWrapper.appendChild(imgSlide);
+                    });
+                }
+                
+                // Init nested swiper mới
+                initNestedSwiper(activeSlide, freshData);
+                DebugLog.add('SWIPER', 'Nested swiper recreated', { id: nestedEl.id });
+            }
+        }
+
+        // 🔧 SỬA LỖI: XÓA UI CŨ trước khi tạo UI mới
+        const existingUI = document.querySelector('.gallery-custom-ui');
+        if (existingUI) {
+            existingUI.remove();
+            DebugLog.add('UI', 'Removed old UI before creating new one');
+        }
+
+        // --- update custom UI ---
+        if (article instanceof HTMLElement) {
+            addCustomUI(postUrl, article, freshData);
+        }
+
+        hideLoading();
+        activeSlide.dataset.loaded = 'true';
+        alert('Cập nhật bài viết thành công!');
+        DebugLog.add('UI', 'Post reloaded successfully', { postUrl });
+
+    } catch (e) {
+        hideLoading();
+        DebugLog.add('ERROR', 'Reload post failed', { error: e.message });
+        alert('Không thể tải dữ liệu mới — xem console để biết chi tiết.');
+    }
+}
+
+
+function addCustomUI(postUrl, article, postData) {
+    // 🔧 SỬA LỖI: Lưu trạng thái UI cũ trước khi xóa
     const existing = document.querySelector('.gallery-custom-ui');
+    const wasVisible = existing ? uiVisible : false;
+    
     if (existing) {
-      DebugLog.add('UI', 'Removing existing UI');
+      DebugLog.add('UI', 'Removing existing UI', { wasVisible });
       existing.remove();
     }
 
@@ -1345,7 +1441,22 @@ document.addEventListener("DOMContentLoaded", function () {
     uiContainer.appendChild(toggleBtn);
     document.body.appendChild(uiContainer);
 
-    [reloadBtn, commentBtn, linkBtn, contentBtn].forEach(b => b.style.display = 'none');
+    const iconEye = toggleBtn.querySelector('.icon-eye');
+    const iconEyeSlash = toggleBtn.querySelector('.icon-eye-slash');
+    const buttons = [debugBtn, reloadBtn, commentBtn, linkBtn, contentBtn];
+
+    // 🔧 SỬA LỖI: Khôi phục trạng thái UI cũ
+    if (wasVisible) {
+        iconEye.style.display = 'block';
+        iconEyeSlash.style.display = 'none';
+        buttons.forEach(b => b.style.display = 'flex');
+        uiVisible = true;
+    } else {
+        iconEye.style.display = 'none';
+        iconEyeSlash.style.display = 'block';
+        buttons.forEach(b => b.style.display = 'none');
+        uiVisible = false;
+    }
 
     debugBtn.addEventListener('click', () => {
       DebugLog.add('UI', 'Debug button clicked');
@@ -1353,36 +1464,8 @@ document.addEventListener("DOMContentLoaded", function () {
     });
 
     reloadBtn.addEventListener('click', async () => {
-      DebugLog.add('UI', 'Reload button clicked', { postUrl });
-      postCache.cache.delete(postUrl);
-      postCache.lastAccess.delete(postUrl);
-      
-      if (mainSwiper) {
-        const activeSlide = mainSwiper.slides[mainSwiper.activeIndex];
-        if (activeSlide && activeSlide.dataset.postUrl === postUrl) {
-          activeSlide.dataset.loaded = 'false';
-          activeSlide.dataset.loading = 'false';
-          activeSlide.postData = null;
-          
-          const nestedEl = activeSlide.querySelector('.swiper-nested');
-          if (nestedEl && nestedSwipers.has(nestedEl.id)) {
-            nestedSwipers.get(nestedEl.id).destroy(true, true);
-            nestedSwipers.delete(nestedEl.id);
-          }
-          
-          showLoading();
-          await loadPostDataForSlide(article);
-          hideLoading();
-          
-          if (activeSlide.postData) {
-            initNestedSwiper(activeSlide, activeSlide.postData);
-            addCustomUI(activeSlide.postData.url, activeSlide.postData.article, activeSlide.postData);
-          }
-          
-          DebugLog.add('UI', 'Post reloaded successfully');
-          alert('Cập nhật dữ liệu thành công!');
-        }
-      }
+      const activeSlide = mainSwiper?.slides[mainSwiper.activeIndex];
+      await reloadPostData(article, postUrl, activeSlide);
     });
 
     commentBtn.addEventListener('click', () => { 
@@ -1401,10 +1484,6 @@ document.addEventListener("DOMContentLoaded", function () {
       createDrawer("content", html);
     });
 
-    const iconEye = toggleBtn.querySelector('.icon-eye');
-    const iconEyeSlash = toggleBtn.querySelector('.icon-eye-slash');
-    const buttons = [/*debugBtn, */ reloadBtn, commentBtn, linkBtn, contentBtn];
-
     function toggleUIHandler(e) {
       e && e.preventDefault && e.preventDefault();
       e && e.stopPropagation && e.stopPropagation();
@@ -1422,11 +1501,11 @@ document.addEventListener("DOMContentLoaded", function () {
       return false;
     }
 
-    toggleBtn.addEventListener('mousedown', toggleUIHandler, true);
-    toggleBtn.addEventListener('touchstart', toggleUIHandler, true);
+    toggleBtn.addEventListener('click', toggleUIHandler);
     
     DebugLog.add('UI', 'Custom UI added successfully');
-  }
+}
+  
 
   function attachArticleEvents() {
     const articles = document.querySelectorAll('article');
