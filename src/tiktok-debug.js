@@ -98,13 +98,11 @@ document.addEventListener("DOMContentLoaded", function () {
 /* ListView - Enhanced Debug Version with Logs */
 
 // ========== DEBUG LOG MANAGER ==========
-let debug = false;
 const DebugLog = {
   logs: [],
   maxLogs: 500,
   
   add(category, message, data = null) {
-    if(!debug) return;
     const timestamp = new Date().toLocaleTimeString('vi-VN', { 
       hour12: false, 
       hour: '2-digit', 
@@ -1380,7 +1378,6 @@ document.addEventListener("DOMContentLoaded", function () {
           }
           
           DebugLog.add('UI', 'Post reloaded successfully');
-          alert('Cập nhật dữ liệu thành công!');
         }
       }
     });
@@ -1403,7 +1400,7 @@ document.addEventListener("DOMContentLoaded", function () {
 
     const iconEye = toggleBtn.querySelector('.icon-eye');
     const iconEyeSlash = toggleBtn.querySelector('.icon-eye-slash');
-    const buttons = [/*debugBtn, */ reloadBtn, commentBtn, linkBtn, contentBtn];
+    const buttons = [debugBtn, reloadBtn, commentBtn, linkBtn, contentBtn];
 
     function toggleUIHandler(e) {
       e && e.preventDefault && e.preventDefault();
@@ -1569,4 +1566,3 @@ document.addEventListener("DOMContentLoaded", function () {
   `;
   document.head.appendChild(style);
 });
-  
