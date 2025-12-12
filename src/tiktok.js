@@ -1,5 +1,3 @@
-// postview
-
 document.addEventListener("DOMContentLoaded", function () {
   if (!document.body.classList.contains("post-view")) return;
 
