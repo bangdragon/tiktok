@@ -1,3 +1,5 @@
+// postview
+
 document.addEventListener("DOMContentLoaded", function () {
   if (!document.body.classList.contains("post-view")) return;
 
@@ -90,6 +92,7 @@ document.addEventListener("DOMContentLoaded", function () {
   }
 
 });
+
 
 //listview
 
@@ -1808,3 +1811,4 @@ function addCustomUI(postUrl, article, postData) {
   `;
   document.head.appendChild(style);
 });
+  
