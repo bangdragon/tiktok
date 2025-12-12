@@ -1,3 +1,97 @@
+// postview
+
+document.addEventListener("DOMContentLoaded", function () {
+  if (!document.body.classList.contains("post-view")) return;
+
+  // =======================================
+  // Thu thập tất cả ảnh từ <div.separator>
+  // =======================================
+  const images = [];
+  const separators = document.querySelectorAll("div.separator");
+
+  separators.forEach((div, index) => {
+    const link = div.querySelector("a");
+    if (!link || !link.href) return;
+
+    images.push({
+      url: link.href,
+      element: div,
+      index: index
+    });
+
+    // Thay thế bằng ảnh có thể click
+    const img = document.createElement("img");
+    img.src = link.href;
+    img.loading = "lazy";
+    img.style.width = "100%";
+    img.style.display = "block";
+    img.style.cursor = "pointer";
+    img.dataset.imageIndex = index;
+
+    div.innerHTML = "";
+    div.appendChild(img);
+
+    // Click vào ảnh → mở gallery
+    img.addEventListener("click", () => openGallery(index));
+  });
+
+  if (images.length === 0) return;
+
+  // =======================================
+  // Tạo Gallery Container
+  // =======================================
+  const galleryHTML = `
+    <div id="swiper-gallery" style="
+      position: fixed;
+      inset: 0;
+      z-index: 99999;
+      background: #000;
+      display: none;
+    ">
+      <div class="swiper" style="width: 100%; height: 100%;">
+        <div class="swiper-wrapper">
+          ${images.map(img => `
+            <div class="swiper-slide" style="display: flex; align-items: center; justify-content: center;">
+              <img src="${img.url}" style="width: 100%; height: 100%; object-fit: cover; object-position: center; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; pointer-events: none;" draggable="false">
+            </div>
+          `).join('')}
+        </div>
+      </div>
+    </div>
+  `;
+
+  document.body.insertAdjacentHTML("beforeend", galleryHTML);
+
+  const galleryContainer = document.getElementById("swiper-gallery");
+  // =======================================
+  // Khởi tạo Swiper
+  // =======================================
+  let swiper = null;
+  let galleryOpen = false;
+
+  function initSwiper(initialIndex) {
+    if (swiper) {
+      swiper.destroy(true, true);
+    }
+
+    swiper = new Swiper(galleryContainer.querySelector(".swiper"), {
+      direction: "horizontal",
+      loop: images.length > 1,
+      initialSlide: initialIndex,
+      keyboard: {
+        enabled: true
+      }
+    });
+  }
+  function openGallery(index) {
+    initSwiper(index);
+    galleryContainer.style.display = "block";
+    galleryOpen = true;
+    history.pushState({ gallery: true }, "");
+    document.body.style.overflow = "hidden";
+  }
+
+});
 
 //listview
 
@@ -728,93 +822,77 @@ function hideLoading() {
   }
   
   function createEmptySlide(article) {
-  const postUrl = article.querySelector('a[data-post-url]')?.dataset.postUrl;
-  if (!postUrl) return null;
-  
-  const mainWrapper = galleryContainer?.querySelector('.swiper-main .swiper-wrapper');
-  if (!mainWrapper) return null;
-  
-  const existingSlide = mainWrapper.querySelector(`[data-post-url="${postUrl}"]`);
-  if (existingSlide) return existingSlide;
-  
-  const slide = document.createElement('div');
-  slide.className = 'swiper-slide';
-  slide.dataset.postUrl = postUrl;
-  slide.dataset.loaded = 'false';
-  slide.dataset.loading = 'false';
-  
-  const nestedId = `nested-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-  
-  // 🔧 QUAN TRỌNG: Không set shouldLoop ban đầu
-  slide.innerHTML = `
-    <div class="swiper swiper-nested" id="${nestedId}">
-      <div class="swiper-wrapper">
-        <div class="swiper-slide">
-          <div class="placeholder">Đang tải slide...</div>
+    const postUrl = article.querySelector('a[data-post-url]')?.dataset.postUrl;
+    if (!postUrl) return null;
+    
+    const mainWrapper = galleryContainer?.querySelector('.swiper-main .swiper-wrapper');
+    if (!mainWrapper) return null;
+    
+    const existingSlide = mainWrapper.querySelector(`[data-post-url="${postUrl}"]`);
+    if (existingSlide) return existingSlide;
+    
+    const slide = document.createElement('div');
+    slide.className = 'swiper-slide';
+    slide.dataset.postUrl = postUrl;
+    slide.dataset.loaded = 'false';
+    slide.dataset.loading = 'false';
+    
+    const nestedId = `nested-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    slide.innerHTML = `
+      <div class="swiper swiper-nested" id="${nestedId}" data-should-loop="false">
+        <div class="swiper-wrapper">
+          <div class="swiper-slide">
+            <div class="placeholder">Đang tải slide...</div>
+          </div>
         </div>
       </div>
-    </div>
-  `;
-  
-  DebugLog.add('GALLERY', 'Empty slide created', { postUrl, nestedId });
-  return slide;
-}
+    `;
+    
+    DebugLog.add('GALLERY', 'Empty slide created', { postUrl, nestedId });
+    return slide;
+  }
   
   function updateNestedSwiperSlides(nestedSwiper, postData) {
-  if (!nestedSwiper || !postData) return;
-  
-  const imageCount = postData.images?.length || 0;
-  const shouldLoop = imageCount > 1;
-  
-  DebugLog.add('SWIPER', 'Updating nested swiper slides', { 
-    imageCount,
-    shouldLoop
-  });
-  
-  // 🔧 BƯỚC 1: Destroy loop cũ nếu có
-  if (nestedSwiper.params.loop) {
-    nestedSwiper.loopDestroy();
-  }
-  
-  // 🔧 BƯỚC 2: Xóa tất cả slides cũ
-  nestedSwiper.removeAllSlides();
-  
-  // 🔧 BƯỚC 3: Thêm slides mới
-  if (imageCount > 0) {
-    const newSlides = postData.images.map((imgUrl, idx) => {
-      return `<div class="swiper-slide swiper-slide-image">
-        ${createImageWithLoader(imgUrl, idx)}
-      </div>`;
+    if (!nestedSwiper || !postData) return;
+    
+    DebugLog.add('SWIPER', 'Updating nested swiper slides', { 
+      imageCount: postData.images?.length || 0 
     });
     
-    nestedSwiper.appendSlide(newSlides);
-    preloadImages([postData.images[0]]);
-  } else {
-    nestedSwiper.appendSlide(
-      '<div class="swiper-slide"><div class="placeholder">Không có ảnh</div></div>'
-    );
+    nestedSwiper.removeAllSlides();
+    
+    if (postData.images && postData.images.length > 0) {
+      const newSlides = postData.images.map((imgUrl, idx) => {
+        return `<div class="swiper-slide swiper-slide-image">
+          ${createImageWithLoader(imgUrl, idx)}
+        </div>`;
+      });
+      
+      nestedSwiper.appendSlide(newSlides);
+      preloadImages([postData.images[0]]);
+      
+      const shouldLoop = postData.images.length > 1;
+      nestedSwiper.params.loop = shouldLoop;
+      nestedSwiper.params.loopAdditionalSlides = shouldLoop ? 2 : 0;
+      
+      if (shouldLoop) {
+        nestedSwiper.loopDestroy();
+        nestedSwiper.loopCreate();
+      }
+      
+      nestedSwiper.update();
+      
+      DebugLog.add('SWIPER', 'Nested swiper updated', { 
+        slideCount: nestedSwiper.slides.length,
+        loop: shouldLoop
+      });
+    } else {
+      nestedSwiper.appendSlide('<div class="swiper-slide"><div class="placeholder">Không có ảnh</div></div>');
+      DebugLog.add('SWIPER', 'No images in post');
+    }
+    
+    nestedSwiper.slideTo(0, 0);
   }
-  
-  // 🔧 BƯỚC 4: Cập nhật config loop
-  nestedSwiper.params.loop = shouldLoop;
-  nestedSwiper.params.loopedSlides = imageCount;
-  nestedSwiper.params.loopAdditionalSlides = shouldLoop ? Math.min(2, imageCount) : 0;
-  
-  // 🔧 BƯỚC 5: Tạo lại loop nếu cần
-  if (shouldLoop) {
-    nestedSwiper.loopCreate();
-  }
-  
-  // 🔧 BƯỚC 6: Force update và reset
-  nestedSwiper.update();
-  nestedSwiper.slideTo(0, 0);
-  
-  DebugLog.add('SWIPER', 'Nested swiper updated successfully', { 
-    slideCount: nestedSwiper.slides.length,
-    loop: nestedSwiper.params.loop,
-    realSlideCount: imageCount
-  });
-}
   
   async function loadPostDataForSlide(article) {
     const postUrl = article.querySelector('a[data-post-url]')?.dataset.postUrl;
@@ -1069,120 +1147,67 @@ function hideLoading() {
     isPreloading = false;
   }
   
-function initNestedSwiper(slideEl, postData) {
-  const nestedEl = slideEl.querySelector('.swiper-nested');
-  if (!nestedEl) {
-    DebugLog.add('ERROR', 'initNestedSwiper: No nested element');
-    return;
-  }
-  
-  const nestedId = nestedEl.id;
-  
-  // 🔧 QUAN TRỌNG: Destroy swiper cũ HOÀN TOÀN
-  if (nestedSwipers.has(nestedId)) {
-    const oldSwiper = nestedSwipers.get(nestedId);
-    oldSwiper.destroy(true, true); // destroy(deleteInstance, cleanStyles)
-    nestedSwipers.delete(nestedId);
-    DebugLog.add('SWIPER', 'Old nested swiper destroyed', { id: nestedId });
-    
-    // Chờ DOM cleanup
-    await new Promise(resolve => setTimeout(resolve, 50));
-  }
-
-  // 🔧 Tính toán số ảnh thực tế
-  const imageCount = postData.images?.length || 0;
-  const shouldLoop = imageCount > 1; // CHỈ loop khi có >= 2 ảnh
-  
-  DebugLog.add('SWIPER', 'Creating nested swiper', { 
-    id: nestedId,
-    imageCount,
-    shouldLoop
-  });
-
-  // 🔧 Tạo config động dựa trên số ảnh
-  const swiperConfig = {
-    direction: 'horizontal',
-    loop: shouldLoop,
-    speed: 300,
-    touchRatio: 1,
-    threshold: 5,
-    resistance: true,
-    resistanceRatio: 0.85,
-    
-    // 🔧 QUAN TRỌNG: Set loopedSlides = số ảnh
-    loopedSlides: imageCount,
-    loopAdditionalSlides: shouldLoop ? Math.min(2, imageCount) : 0,
-    
-    // 🔧 Tắt watchSlidesProgress để tránh conflict
-    watchSlidesProgress: false,
-    watchSlidesVisibility: false,
-    
-    on: {
-      init: function() {
-        const activeIndex = this.realIndex || this.activeIndex;
-        DebugLog.add('SWIPER', 'Nested swiper initialized', { 
-          id: nestedId,
-          activeIndex,
-          slideCount: this.slides.length,
-          loop: this.params.loop
-        });
-        
-        // Preload ảnh kế cận
-        if (postData.images) {
-          if (postData.images[activeIndex - 1]) {
-            preloadImages([postData.images[activeIndex - 1]]);
-          }
-          if (postData.images[activeIndex + 1]) {
-            preloadImages([postData.images[activeIndex + 1]]);
-          }
-        }
-      },
-      
-      slideChange: function() {
-        const activeIndex = this.realIndex || this.activeIndex;
-        DebugLog.add('SWIPER', 'Nested swiper slide changed', { 
-          id: nestedId,
-          activeIndex,
-          realIndex: this.realIndex
-        });
-        
-        // Preload ảnh kế cận
-        if (postData.images) {
-          if (postData.images[activeIndex - 1]) {
-            preloadImages([postData.images[activeIndex - 1]]);
-          }
-          if (postData.images[activeIndex + 1]) {
-            preloadImages([postData.images[activeIndex + 1]]);
-          }
-        }
-      },
-      
-      // 🔧 THÊM: Xử lý khi loop fix
-      loopFix: function() {
-        DebugLog.add('SWIPER', 'Loop fix triggered', { id: nestedId });
-      }
+  function initNestedSwiper(slideEl, postData) {
+    const nestedEl = slideEl.querySelector('.swiper-nested');
+    if (!nestedEl) {
+      DebugLog.add('ERROR', 'initNestedSwiper: No nested element');
+      return;
     }
-  };
-  
-  // 🔧 Tạo swiper mới
-  const nested = new Swiper(nestedEl, swiperConfig);
-  
-  // 🔧 QUAN TRỌNG: Force update sau khi init
-  if (shouldLoop) {
-    nested.loopDestroy();
-    nested.loopCreate();
-    nested.update();
-  }
-  
-  nestedSwipers.set(nestedId, nested);
-  
-  DebugLog.add('SWIPER', 'Nested swiper created successfully', {
-    id: nestedId,
-    slideCount: nested.slides.length,
-    loop: nested.params.loop
-  });
-}
+    
+    if (nestedSwipers.has(nestedEl.id)) {
+      DebugLog.add('SWIPER', 'Nested swiper already exists', { id: nestedEl.id });
+      return;
+    }
 
+    const shouldLoop = nestedEl.dataset.shouldLoop === 'true';
+    
+    DebugLog.add('SWIPER', 'Creating nested swiper', { 
+      id: nestedEl.id,
+      shouldLoop,
+      imageCount: postData.images?.length || 0
+    });
+
+    const nested = new Swiper(nestedEl, {
+      direction: 'horizontal',
+      loop: shouldLoop,
+      loopAdditionalSlides: shouldLoop ? 2 : 0,
+      on: {
+        init: function() {
+          const activeIndex = this.realIndex || this.activeIndex;
+          DebugLog.add('SWIPER', 'Nested swiper initialized', { 
+            id: nestedEl.id,
+            activeIndex,
+            slideCount: this.slides.length
+          });
+          if (postData.images[activeIndex - 1]) preloadImages([postData.images[activeIndex - 1]]);
+          if (postData.images[activeIndex + 1]) preloadImages([postData.images[activeIndex + 1]]);
+        },
+        slideChange: function() {
+          const activeIndex = this.realIndex || this.activeIndex;
+          DebugLog.add('SWIPER', 'Nested swiper slide changed', { 
+            id: nestedEl.id,
+            activeIndex 
+          });
+          if (postData.images[activeIndex - 1]) preloadImages([postData.images[activeIndex - 1]]);
+          if (postData.images[activeIndex + 1]) preloadImages([postData.images[activeIndex + 1]]);
+        },
+        touchStart: function(swiper, event) {
+          DebugLog.add('SWIPER', 'Nested swiper touchStart', {
+            id: nestedEl.id
+          });
+        },
+        touchEnd: function(swiper, event) {
+          DebugLog.add('SWIPER', 'Nested swiper touchEnd', {
+            id: nestedEl.id,
+            activeIndex: swiper.activeIndex
+          });
+        }
+      }
+    });
+    
+
+    nestedSwipers.set(nestedEl.id, nested);
+  }
 
   async function preloadAdjacentPosts(article) {
     const nextArticle = getNextArticle(article);
@@ -1354,318 +1379,177 @@ function initNestedSwiper(slideEl, postData) {
     }, 300);
   }
 
-  function resetNestedSwiper(slideEl, postData) {
-  const nestedEl = slideEl.querySelector('.swiper-nested');
-  if (!nestedEl) return;
-  
-  const nestedId = nestedEl.id;
-  
-  // Destroy swiper cũ
-  if (nestedSwipers.has(nestedId)) {
-    const swiper = nestedSwipers.get(nestedId);
-    swiper.destroy(true, true);
-    nestedSwipers.delete(nestedId);
-  }
-  
-  // Reset HTML
-  const wrapper = nestedEl.querySelector('.swiper-wrapper');
-  if (wrapper) {
-    wrapper.innerHTML = '';
-    
-    const imageCount = postData.images?.length || 0;
-    if (imageCount > 0) {
-      postData.images.forEach((imgUrl, idx) => {
-        const imgSlide = document.createElement('div');
-        imgSlide.className = 'swiper-slide swiper-slide-image';
-        imgSlide.innerHTML = createImageWithLoader(imgUrl, idx);
-        wrapper.appendChild(imgSlide);
-      });
-    } else {
-      wrapper.innerHTML = '<div class="swiper-slide"><div class="placeholder">Không có ảnh</div></div>';
-    }
-  }
-  
-  // Init lại swiper
-  initNestedSwiper(slideEl, postData);
-}
   
   async function reloadPostData(article, postUrl, activeSlide) {
-  try {
-    DebugLog.add('UI', 'Reload button clicked', { postUrl });
-    
-    // ✅ Hiển thị loading
-    showLoading('Đang cập nhật bài viết...');
-    
-    // Đợi 1 frame để đảm bảo loading hiện ra
-    await new Promise(resolve => requestAnimationFrame(resolve));
-    
-    // ========== BƯỚC 1: XÓA CACHE CŨ ==========
-    postCache.cache.delete(postUrl);
-    postCache.lastAccess.delete(postUrl);
-    try { 
-      localStorage.removeItem(CACHE_PREFIX + postUrl); 
-    } catch(e) {
-      console.warn('Failed to clear localStorage:', e);
-    }
-    DebugLog.add('CACHE', 'Old cache cleared', { postUrl });
-    
-    // ========== BƯỚC 2: DESTROY SWIPER CŨ + TẠO ID MỚI ==========
-    if (activeSlide) {
-      const nestedEl = activeSlide.querySelector('.swiper-nested');
-      
-      if (nestedEl && nestedSwipers.has(nestedEl.id)) {
-        const oldId = nestedEl.id;
-        const oldSwiper = nestedSwipers.get(oldId);
-        
-        // 🔥 QUAN TRỌNG: Destroy loop TRƯỚC
-        if (oldSwiper.params.loop) {
-          try {
-            oldSwiper.loopDestroy();
-            DebugLog.add('SWIPER', 'Loop destroyed', { id: oldId });
-          } catch (e) {
-            console.warn('Loop destroy failed:', e);
-          }
+    try {
+        DebugLog.add('UI', 'Reload button clicked', { postUrl });
+        showLoading('Đang cập nhật bài viết...');
+        await new Promise(requestAnimationFrame);
+
+        // --- xóa cache CŨ ---
+        postCache.cache.delete(postUrl);
+        postCache.lastAccess.delete(postUrl);
+        try { localStorage.removeItem(CACHE_PREFIX + postUrl); } catch(e) {}
+        DebugLog.add('CACHE', 'Old cache cleared', { postUrl });
+
+        // --- reset slide để reload ---
+        if (activeSlide) {
+            activeSlide.dataset.loaded = 'false';
+            activeSlide.dataset.loading = 'false';
+            activeSlide.postData = null;
+
+            // 🔧 SỬA LỖI: Destroy swiper CŨ và tạo lại nested element MỚI
+            const nestedEl = activeSlide.querySelector('.swiper-nested');
+            if (nestedEl && nestedSwipers.has(nestedEl.id)) {
+                const oldId = nestedEl.id;
+                nestedSwipers.get(oldId).destroy(true, true);
+                nestedSwipers.delete(oldId);
+                
+                // Tạo nested element hoàn toàn mới với ID mới
+                const newNestedId = `nested-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+                nestedEl.id = newNestedId;
+                nestedEl.dataset.shouldLoop = 'false';
+                
+                // Reset HTML của nested container
+                const nestedWrapper = nestedEl.querySelector('.swiper-wrapper');
+                if (nestedWrapper) {
+                    nestedWrapper.innerHTML = '<div class="swiper-slide"><div class="placeholder">Đang tải...</div></div>';
+                }
+            }
         }
+
+        // --- fetch dữ liệu mới với cache busting ---
+        const cacheBustUrl = postUrl + '?_=' + Date.now();
+        DebugLog.add('FETCH', 'Fetching fresh data', { cacheBustUrl });
         
-        // Destroy swiper
-        oldSwiper.destroy(true, true);
-        nestedSwipers.delete(oldId);
-        DebugLog.add('SWIPER', 'Old swiper destroyed', { oldId });
-        
-        // 🔥 TẠO ID MỚI để tránh conflict
-        const newNestedId = `nested-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-        nestedEl.id = newNestedId;
-        nestedEl.dataset.shouldLoop = 'false';
-        
-        DebugLog.add('SWIPER', 'New ID created', { 
-          oldId, 
-          newId: newNestedId 
+        const res = await fetch(cacheBustUrl);
+        const html = await res.text();
+        const parser = new DOMParser();
+        const doc = parser.parseFromString(html, 'text/html');
+
+        // Parse images
+        const images = [];
+        const separators = doc.querySelectorAll('.separator a[href]');
+        separators.forEach(link => {
+            let imgUrl = link.href;
+            if (imgUrl && !imgUrl.includes('blogger.googleusercontent.com/tracker')) {
+                images.push(imgUrl);
+            }
         });
-        
-        // Reset HTML của nested wrapper
-        const nestedWrapper = nestedEl.querySelector('.swiper-wrapper');
-        if (nestedWrapper) {
-          nestedWrapper.innerHTML = '<div class="swiper-slide"><div class="placeholder">Đang tải...</div></div>';
+
+        // Parse text content
+        const postBody = doc.querySelector('.post-body');
+        let textContent = '';
+        if (postBody) {
+            const clone = postBody.cloneNode(true);
+            clone.querySelectorAll('img, .separator').forEach(el => el.remove());
+            textContent = clone.innerHTML;
         }
-      }
-      
-      // Reset slide state
-      activeSlide.dataset.loaded = 'false';
-      activeSlide.dataset.loading = 'false';
-      activeSlide.postData = null;
-    }
-    
-    // ========== BƯỚC 3: FETCH DỮ LIỆU MỚI ==========
-    const cacheBustUrl = postUrl + '?_=' + Date.now();
-    DebugLog.add('FETCH', 'Fetching fresh data', { cacheBustUrl });
-    
-    const res = await fetch(cacheBustUrl);
-    
-    if (!res.ok) {
-      throw new Error(`HTTP error! status: ${res.status}`);
-    }
-    
-    const html = await res.text();
-    const parser = new DOMParser();
-    const doc = parser.parseFromString(html, 'text/html');
-    
-    // ========== BƯỚC 4: PARSE IMAGES THEO THỨ TỰ ==========
-    const images = [];
-    const separators = doc.querySelectorAll('.separator a[href]');
-    
-    separators.forEach((link, idx) => {
-      let imgUrl = link.href;
-      if (imgUrl && !imgUrl.includes('blogger.googleusercontent.com/tracker')) {
-        images.push(imgUrl);
-        DebugLog.add('FETCH', 'Image parsed', { 
-          index: idx, 
-          url: imgUrl.substring(0, 50) + '...' 
-        });
-      }
-    });
-    
-    DebugLog.add('FETCH', 'Total images found', { count: images.length });
-    
-    // ========== BƯỚC 5: PARSE TEXT CONTENT ==========
-    const postBody = doc.querySelector('.post-body');
-    let textContent = '';
-    
-    if (postBody) {
-      const clone = postBody.cloneNode(true);
-      clone.querySelectorAll('img, .separator').forEach(el => el.remove());
-      textContent = clone.innerHTML;
-    }
-    
-    // ========== BƯỚC 6: PARSE COMMENTS URL VỚI FALLBACK ĐẦY ĐỦ ==========
-    let commentsUrl = null;
-    
-    // Try 1: Tìm iframe
-    const commentsFrame = doc.querySelector('iframe[src*="blogger.com/comment"]');
-    if (commentsFrame) {
-      commentsUrl = commentsFrame.src;
-      DebugLog.add('FETCH', 'Comments URL found from iframe', { commentsUrl });
-    }
-    
-    // Try 2: Tìm trong script tags
-    if (!commentsUrl) {
-      const scripts = doc.querySelectorAll('script');
-      scripts.forEach(script => {
-        const content = script.textContent;
-        if (content && content.includes('commentIframeUrl')) {
-          const match = content.match(/commentIframeUrl["'\s:]+([^"']+)/);
-          if (match) {
-            commentsUrl = match[1];
-            DebugLog.add('FETCH', 'Comments URL found from script', { commentsUrl });
-          }
-        }
-      });
-    }
-    
-    // Try 3: Build từ blogId + postId
-    if (!commentsUrl) {
-      const blogIdMatch = html.match(/blogId[=:"'\s]+(\d+)/);
-      const postIdMatch = html.match(/postId[=:"'\s]+(\d+)/);
-      
-      if (blogIdMatch && postIdMatch) {
-        commentsUrl = `https://www.blogger.com/comment-iframe.g?blogID=${blogIdMatch[1]}&postID=${postIdMatch[1]}`;
-        DebugLog.add('FETCH', 'Comments URL built from IDs', { 
-          blogId: blogIdMatch[1],
-          postId: postIdMatch[1],
-          commentsUrl 
-        });
-      }
-    }
-    
-    if (!commentsUrl) {
-      DebugLog.add('FETCH', 'Comments URL not found');
-    }
-    
-    // ========== BƯỚC 7: TẠO OBJECT DỮ LIỆU MỚI ==========
-    const freshData = { 
-      images, 
-      textContent, 
-      commentsUrl 
-    };
-    
-    // Lưu vào cache với key URL gốc (không có timestamp)
-    postCache.set(postUrl, freshData);
-    
-    DebugLog.add('CACHE', 'Fresh data saved to cache', { 
-      postUrl, 
-      imageCount: images.length,
-      hasTextContent: !!textContent,
-      hasCommentsUrl: !!commentsUrl
-    });
-    
-    // ========== BƯỚC 8: UPDATE SLIDES VỚI DATA MỚI ==========
-    if (activeSlide) {
-      activeSlide.postData = freshData;
-      
-      const nestedEl = activeSlide.querySelector('.swiper-nested');
-      
-      if (nestedEl instanceof HTMLElement) {
-        // Update shouldLoop dựa trên số lượng ảnh mới
-        nestedEl.dataset.shouldLoop = freshData.images && freshData.images.length > 1 ? 'true' : 'false';
-        
-        DebugLog.add('SWIPER', 'Should loop set', { 
-          shouldLoop: nestedEl.dataset.shouldLoop,
-          imageCount: freshData.images?.length || 0
-        });
-        
-        // Cập nhật slides với ảnh mới
-        const nestedWrapper = nestedEl.querySelector('.swiper-wrapper');
-        
-        if (nestedWrapper && freshData.images && freshData.images.length > 0) {
-          // 🔥 XÓA TOÀN BỘ slides cũ
-          nestedWrapper.innerHTML = '';
-          
-          // 🔥 TẠO slides mới THEO THỨ TỰ ĐÚNG
-          freshData.images.forEach((imgUrl, idx) => {
-            const imgSlide = document.createElement('div');
-            imgSlide.className = 'swiper-slide swiper-slide-image';
-            
-            // 🔥 QUAN TRỌNG: Đánh index để track thứ tự
-            imgSlide.dataset.swiperSlideIndex = idx;
-            
-            imgSlide.innerHTML = createImageWithLoader(imgUrl, idx);
-            nestedWrapper.appendChild(imgSlide);
-            
-            DebugLog.add('SWIPER', 'Slide created', { 
-              index: idx, 
-              url: imgUrl.substring(0, 50) + '...' 
+
+        // Parse comments URL
+        let commentsUrl = null;
+        const commentsFrame = doc.querySelector('iframe[src*="blogger.com/comment"]');
+        if (commentsFrame) commentsUrl = commentsFrame.src;
+
+        if (!commentsUrl) {
+            const scripts = doc.querySelectorAll('script');
+            scripts.forEach(script => {
+                const content = script.textContent;
+                if (content && content.includes('commentIframeUrl')) {
+                    const match = content.match(/commentIframeUrl["'\s:]+([^"']+)/);
+                    if (match) commentsUrl = match[1];
+                }
             });
-          });
-          
-          // Preload ảnh đầu tiên
-          preloadImages([freshData.images[0]]);
-          
-          DebugLog.add('SWIPER', 'All slides created', { 
-            count: freshData.images.length 
-          });
-        } else {
-          // Không có ảnh
-          nestedWrapper.innerHTML = '<div class="swiper-slide"><div class="placeholder">Không có ảnh</div></div>';
-          DebugLog.add('SWIPER', 'No images, placeholder created');
         }
+
+        if (!commentsUrl) {
+            const blogIdMatch = html.match(/blogId[=:"'\s]+(\d+)/);
+            const postIdMatch = html.match(/postId[=:"'\s]+(\d+)/);
+            if (blogIdMatch && postIdMatch) {
+                commentsUrl = `https://www.blogger.com/comment-iframe.g?blogID=${blogIdMatch[1]}&postID=${postIdMatch[1]}`;
+            }
+        }
+
+        // 🔧 TẠO object freshData
+        const freshData = { images, textContent, commentsUrl };
         
-        // 🔥 QUAN TRỌNG: Init nested swiper SAU KHI đã tạo xong slides
-        initNestedSwiper(activeSlide, freshData);
-        
-        DebugLog.add('SWIPER', 'Nested swiper initialized', { 
-          id: nestedEl.id,
-          imageCount: freshData.images?.length || 0
+        // 🔧 LƯU VÀO CACHE với key URL GỐC (không có timestamp)
+        postCache.set(postUrl, freshData);
+        DebugLog.add('CACHE', 'Fresh data saved to cache', { 
+            postUrl, 
+            imageCount: images.length 
         });
-      }
-      
-      // 🔥 Đánh dấu slide đã loaded SAU KHI init xong
-      activeSlide.dataset.loaded = 'true';
-      activeSlide.dataset.loading = 'false';
+
+        // --- gán postData mới cho slide ---
+        if (activeSlide) {
+            activeSlide.postData = freshData;
+        }
+
+        // --- init nested swiper với element MỚI ---
+        if (activeSlide) {
+            const nestedEl = activeSlide.querySelector('.swiper-nested');
+            if (nestedEl instanceof HTMLElement) {
+                // Update shouldLoop dựa trên số lượng ảnh mới
+                nestedEl.dataset.shouldLoop = freshData.images && freshData.images.length > 1 ? 'true' : 'false';
+                
+                // Cập nhật slides với ảnh mới
+                const nestedWrapper = nestedEl.querySelector('.swiper-wrapper');
+                if (nestedWrapper && freshData.images && freshData.images.length > 0) {
+                    nestedWrapper.innerHTML = '';
+                    freshData.images.forEach((imgUrl, idx) => {
+                        const imgSlide = document.createElement('div');
+                        imgSlide.className = 'swiper-slide swiper-slide-image';
+                        imgSlide.innerHTML = createImageWithLoader(imgUrl, idx);
+                        nestedWrapper.appendChild(imgSlide);
+                    });
+                    
+                    // Preload first image
+                    preloadImages([freshData.images[0]]);
+                }
+                
+                // Init nested swiper mới
+                initNestedSwiper(activeSlide, freshData);
+                DebugLog.add('SWIPER', 'Nested swiper recreated', { id: nestedEl.id });
+            }
+        }
+
+        // 🔧 XÓA UI CŨ trước khi tạo UI mới
+        const existingUI = document.querySelector('.gallery-custom-ui');
+        if (existingUI) {
+            existingUI.remove();
+            DebugLog.add('UI', 'Removed old UI before creating new one');
+        }
+
+        // --- update custom UI ---
+        if (article instanceof HTMLElement) {
+            addCustomUI(postUrl, article, freshData);
+        }
+
+        // 🔧 Đánh dấu slide đã loaded
+        if (activeSlide) {
+            activeSlide.dataset.loaded = 'true';
+            activeSlide.dataset.loading = 'false';
+        }
+
+        hideLoading();
+        alert('Cập nhật bài viết thành công!');
+        DebugLog.add('UI', 'Post reloaded successfully', { 
+            postUrl,
+            cached: true,
+            imageCount: freshData.images.length 
+        });
+
+    } catch (e) {
+        hideLoading();
+        DebugLog.add('ERROR', 'Reload post failed', { error: e.message, stack: e.stack });
+        alert('Không thể tải dữ liệu mới — xem console để biết chi tiết.');
+        
+        // Reset slide state on error
+        if (activeSlide) {
+            activeSlide.dataset.loaded = 'false';
+            activeSlide.dataset.loading = 'false';
+        }
     }
-    
-    // ========== BƯỚC 9: XÓA UI CŨ VÀ TẠO UI MỚI ==========
-    const existingUI = document.querySelector('.gallery-custom-ui');
-    if (existingUI) {
-      existingUI.remove();
-      DebugLog.add('UI', 'Old UI removed');
-    }
-    
-    // Tạo custom UI mới
-    if (article instanceof HTMLElement) {
-      addCustomUI(postUrl, article, freshData);
-      DebugLog.add('UI', 'New UI created');
-    }
-    
-    // ========== BƯỚC 10: ẨN LOADING VÀ THÔNG BÁO ==========
-    hideLoading();
-    
-    alert('Cập nhật bài viết thành công!');
-    
-    DebugLog.add('UI', 'Post reloaded successfully', { 
-      postUrl,
-      imageCount: freshData.images.length,
-      hasTextContent: !!freshData.textContent,
-      hasCommentsUrl: !!freshData.commentsUrl
-    });
-    
-  } catch (e) {
-    // ========== XỬ LÝ LỖI ==========
-    hideLoading();
-    
-    DebugLog.add('ERROR', 'Reload post failed', { 
-      error: e.message, 
-      stack: e.stack,
-      postUrl 
-    });
-    
-    console.error('Reload error:', e);
-    alert('Không thể tải dữ liệu mới. Vui lòng thử lại.\n\nLỗi: ' + e.message);
-    
-    // Reset slide state khi có lỗi
-    if (activeSlide) {
-      activeSlide.dataset.loaded = 'false';
-      activeSlide.dataset.loading = 'false';
-    }
-  }
 }
 
 
@@ -1926,4 +1810,3 @@ function addCustomUI(postUrl, article, postData) {
   `;
   document.head.appendChild(style);
 });
-  
