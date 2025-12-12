@@ -97,7 +97,7 @@ document.addEventListener("DOMContentLoaded", function () {
 //listview
 
 /* ListView - Enhanced Debug Version with Logs */
-
+const loopNestedSlide = true
 // ========== DEBUG LOG MANAGER ==========
 const DebugLog = {
   logs: [],
@@ -872,7 +872,8 @@ function hideLoading() {
       nestedSwiper.appendSlide(newSlides);
       preloadImages([postData.images[0]]);
       
-      const shouldLoop = postData.images.length > 1;
+      const shouldLoop =
+  loopNestedSlide === true && postData.images && postData.images.length > 1;
       nestedSwiper.params.loop = shouldLoop;
       nestedSwiper.params.loopAdditionalSlides = shouldLoop ? 2 : 0;
       
@@ -942,7 +943,10 @@ function hideLoading() {
         nestedWrapper.innerHTML = '';
         
         if (postData.images && postData.images.length > 0) {
-          nestedEl.dataset.shouldLoop = postData.images.length > 1 ? 'true' : 'false';
+          nestedEl.dataset.shouldLoop =
+  (loopNestedSlide === true &&
+   postData.images &&
+   postData.images.length > 1).toString();
           
           postData.images.forEach((imgUrl, idx) => {
             const imgSlide = document.createElement('div');
@@ -1160,7 +1164,9 @@ function hideLoading() {
       return;
     }
 
-    const shouldLoop = nestedEl.dataset.shouldLoop === 'true';
+    const shouldLoop =
+  loopNestedSlide === true &&
+  nestedEl.dataset.shouldLoop === 'true';
     
     DebugLog.add('SWIPER', 'Creating nested swiper', { 
       id: nestedEl.id,
