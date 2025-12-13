@@ -97,7 +97,7 @@ document.addEventListener("DOMContentLoaded", function () {
 //listview
 
 /* ListView - Enhanced Debug Version with Logs */
-const loopNestedSlide = true
+const loopNestedSlide = false
 // ========== DEBUG LOG MANAGER ==========
 const DebugLog = {
   logs: [],
