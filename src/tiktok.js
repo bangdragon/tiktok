@@ -1,3 +1,18 @@
+<script>
+//<![CDATA[
+
+function showToast(message, duration = 3000) {
+  Toastify({
+    text: message,
+    duration: duration,
+    gravity: "top",    // top hoặc bottom
+    position: "right", // left, center, right
+    close: true,
+    style: { background: "#333", color: "#fff" }
+  }).showToast();
+}
+
+
 // postview
 
 document.addEventListener("DOMContentLoaded", function () {
@@ -1539,7 +1554,7 @@ function hideLoading() {
         }
 
         hideLoading();
-        alert('Cập nhật bài viết thành công!');
+        showToast('Cập nhật bài viết thành công!');
         DebugLog.add('UI', 'Post reloaded successfully', { 
             postUrl,
             cached: true,
@@ -1549,7 +1564,7 @@ function hideLoading() {
     } catch (e) {
         hideLoading();
         DebugLog.add('ERROR', 'Reload post failed', { error: e.message, stack: e.stack });
-        alert('Không thể tải dữ liệu mới — xem console để biết chi tiết.');
+        showToast('Không thể tải dữ liệu mới — xem console để biết chi tiết.');
         
         // Reset slide state on error
         if (activeSlide) {
@@ -1635,7 +1650,7 @@ function reverseNestedSlideOrder(activeSlide, postData) {
     });
     
     // Chỉ thông báo khi thành công với > 2 ảnh
-    alert('Đã đảo ngược thứ tự ảnh!');
+    showToast('Đã đảo ngược thứ tự ảnh!');
 }
 
 
@@ -1910,3 +1925,7 @@ function addCustomUI(postUrl, article, postData) {
   `;
   document.head.appendChild(style);
 });
+
+// ]]>
+
+</script>
