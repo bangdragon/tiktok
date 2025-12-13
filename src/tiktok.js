@@ -1,5 +1,3 @@
-<script>
-//<![CDATA[
 
 function showToast(message, duration = 3000) {
   Toastify({
@@ -11,7 +9,6 @@ function showToast(message, duration = 3000) {
     style: { background: "#333", color: "#fff" }
   }).showToast();
 }
-
 
 // postview
 
@@ -1925,7 +1922,3 @@ function addCustomUI(postUrl, article, postData) {
   `;
   document.head.appendChild(style);
 });
-
-// ]]>
-
-</script>
