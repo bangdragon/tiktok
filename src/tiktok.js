@@ -1559,9 +1559,88 @@ function hideLoading() {
     }
 }
 
+// Hàm đảo ngược thứ tự ảnh trong nested slide
+function reverseNestedSlideOrder(activeSlide, postData) {
+    if (!activeSlide || !postData || !postData.images || postData.images.length <= 2) {
+        // Không thông báo gì cả, chỉ log
+        DebugLog.add('UI', 'Cannot reverse: need more than 2 images', {
+            imageCount: postData?.images?.length || 0
+        });
+        return;
+    }
+
+    DebugLog.add('UI', 'Reversing nested slide order', { 
+        originalCount: postData.images.length 
+    });
+
+    // Đảo ngược: giữ ảnh đầu, reverse phần còn lại
+    // [0, 1, 2, 3, ..., 9] -> [0, 9, 8, 7, ..., 1]
+    const firstImage = postData.images[0];
+    const restImages = postData.images.slice(1).reverse();
+    const reversedImages = [firstImage, ...restImages];
+
+    // Cập nhật postData
+    postData.images = reversedImages;
+
+    // Lấy nested swiper element
+    const nestedEl = activeSlide.querySelector('.swiper-nested');
+    if (!nestedEl) {
+        DebugLog.add('ERROR', 'No nested swiper element found');
+        return;
+    }
+
+    const nestedId = nestedEl.id;
+    const nestedSwiper = nestedSwipers.get(nestedId);
+
+    if (!nestedSwiper) {
+        DebugLog.add('ERROR', 'No nested swiper instance found', { nestedId });
+        return;
+    }
+
+    // Lưu index hiện tại
+    const currentIndex = nestedSwiper.realIndex || nestedSwiper.activeIndex;
+
+    // Destroy swiper cũ
+    nestedSwiper.destroy(true, true);
+    nestedSwipers.delete(nestedId);
+
+    // Tạo nested element mới với ID mới
+    const newNestedId = `nested-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    nestedEl.id = newNestedId;
+    nestedEl.dataset.shouldLoop = (loopNestedSlide === true && reversedImages.length > 1).toString();
+
+    // Cập nhật HTML với ảnh đã đảo ngược
+    const nestedWrapper = nestedEl.querySelector('.swiper-wrapper');
+    if (nestedWrapper) {
+        nestedWrapper.innerHTML = '';
+        reversedImages.forEach((imgUrl, idx) => {
+            const imgSlide = document.createElement('div');
+            imgSlide.className = 'swiper-slide swiper-slide-image';
+            imgSlide.innerHTML = createImageWithLoader(imgUrl, idx);
+            nestedWrapper.appendChild(imgSlide);
+        });
+    }
+
+    // Init nested swiper mới
+    initNestedSwiper(activeSlide, postData);
+
+    // Giữ nguyên vị trí slide hiện tại nếu có thể
+    const newSwiper = nestedSwipers.get(newNestedId);
+    if (newSwiper && currentIndex < reversedImages.length) {
+        newSwiper.slideTo(currentIndex, 0);
+    }
+
+    DebugLog.add('UI', 'Nested slide reversed successfully', { 
+        newOrder: reversedImages.length 
+    });
+    
+    // Chỉ thông báo khi thành công với > 2 ảnh
+    alert('Đã đảo ngược thứ tự ảnh!');
+}
+
+
 
 function addCustomUI(postUrl, article, postData) {
-    // 🔧 SỬA LỖI: Lưu trạng thái UI cũ trước khi xóa
     const existing = document.querySelector('.gallery-custom-ui');
     const wasVisible = existing ? uiVisible : false;
     
@@ -1585,6 +1664,12 @@ function addCustomUI(postUrl, article, postData) {
     reloadBtn.className = 'ui-btn ui-reload';
     reloadBtn.title = 'Tải lại';
     reloadBtn.innerHTML = '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"></polyline><polyline points="1 20 1 14 7 14"></polyline><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg>';
+
+    // ✅ NÚT REVERSE (đổi tên từ revert)
+    const reverseBtn = document.createElement('button');
+    reverseBtn.className = 'ui-btn ui-reverse';
+    reverseBtn.title = 'Đảo ngược thứ tự ảnh';
+    reverseBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-send-to-back-icon lucide-send-to-back"><rect x="14" y="14" width="8" height="8" rx="2"/><rect x="2" y="2" width="8" height="8" rx="2"/><path d="M7 14v1a2 2 0 0 0 2 2h1"/><path d="M14 7h1a2 2 0 0 1 2 2v1"/></svg>';
 
     const commentBtn = document.createElement('button');
     commentBtn.className = 'ui-btn ui-comment';
@@ -1611,6 +1696,7 @@ function addCustomUI(postUrl, article, postData) {
 
     uiContainer.appendChild(debugBtn);
     uiContainer.appendChild(reloadBtn);
+    uiContainer.appendChild(reverseBtn); // ✅ THÊM NÚT REVERSE
     uiContainer.appendChild(commentBtn);
     uiContainer.appendChild(linkBtn);
     uiContainer.appendChild(contentBtn);
@@ -1619,9 +1705,8 @@ function addCustomUI(postUrl, article, postData) {
 
     const iconEye = toggleBtn.querySelector('.icon-eye');
     const iconEyeSlash = toggleBtn.querySelector('.icon-eye-slash');
-    const buttons = [debugBtn, reloadBtn, commentBtn, linkBtn, contentBtn];
+    const buttons = [debugBtn, reloadBtn, reverseBtn, commentBtn, linkBtn, contentBtn]; // ✅ THÊM reverseBtn
 
-    // 🔧 SỬA LỖI: Khôi phục trạng thái UI cũ
     if (wasVisible) {
         iconEye.style.display = 'block';
         iconEyeSlash.style.display = 'none';
@@ -1642,6 +1727,14 @@ function addCustomUI(postUrl, article, postData) {
     reloadBtn.addEventListener('click', async () => {
       const activeSlide = mainSwiper?.slides[mainSwiper.activeIndex];
       await reloadPostData(article, postUrl, activeSlide);
+    });
+
+    // ✅ SỰ KIỆN CHO NÚT REVERSE
+    reverseBtn.addEventListener('click', () => {
+      const activeSlide = mainSwiper?.slides[mainSwiper.activeIndex];
+      if (activeSlide && activeSlide.postData) {
+        reverseNestedSlideOrder(activeSlide, activeSlide.postData);
+      }
     });
 
     commentBtn.addEventListener('click', () => { 
@@ -1817,4 +1910,3 @@ function addCustomUI(postUrl, article, postData) {
   `;
   document.head.appendChild(style);
 });
-  
